@@ -35,6 +35,7 @@
 .vs/
 x64/
 *.sln
+*.vcxproj
 *.vcxproj.*
 
 #vscode
