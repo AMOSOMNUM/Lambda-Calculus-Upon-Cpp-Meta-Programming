@@ -16,20 +16,32 @@ inline namespace _TypeTuple {
 
     template<typename Current = void, typename...Types>
     struct TypeTuple {
-        using Next = TypeTuple<Types...>;
         static constexpr unsigned size = sizeof...(Types) + 1;
-        template<int index, typename = std::enable_if_t<(index <= size) && (index > 0)>>
-            using Type = __If<index == 1, Current, typename Next::template Type<index - 1>>::Type;
+        using Next = TypeTuple<Types...>;
         using Front = Current;
+
+        template<int index, bool = index == 1>
+        struct AUX;
+        template<int index> 
+        struct AUX<index, true>{
+            using Type = Current;
+        };
+        template<int index>
+        struct AUX<index, false> {
+            using Type = Next::template Type<index - 1>;
+        };
+        template<int index, typename = std::enable_if_t<(index <= size) && (index > 0)>>
+            using Type = AUX<index>::Type;
     };
 
     template<typename Current>
     struct TypeTuple<Current> {
         using Next = TypeTuple<void>;
         static constexpr unsigned size = 1;
+        using Front = Current;
+
         template<int index, typename = std::enable_if_t<index == 1>>
             using Type = Current;
-        using Front = Current;
     };
 
     template<>
@@ -87,10 +99,10 @@ inline namespace _TypeTuple {
         using Left = Front<n - 1, TypeTuple<Args...>>::Left;
     };
 
-    template<typename...Args>
-    struct Front<0, TypeTuple<Args...>> {
+    template<NotVoid T, typename...Args>
+    struct Front<0, TypeTuple<T, Args...>> {
         using Type = TypeTuple<void>;
-        using Left = TypeTuple<Args...>;
+        using Left = TypeTuple<T, Args...>;
     };
 
     template<int n>
@@ -111,5 +123,15 @@ inline namespace _TypeTuple {
     template<int n, typename Value, typename...Args>
     struct Alter<n, Value, TypeTuple<Args...>> {
         using Type = Merge<typename Front<n, TypeTuple<Args...>>::Left, typename Merge<typename Front<n - 1, TypeTuple<Args...>>::Type, Value>::Type>::Type;
+    };
+
+    template<typename Current = void, typename...Args>
+    struct Reverse {
+        using Type = Merge<typename Reverse<Args...>::Type, Current>::Type;
+    };
+
+    template<>
+    struct Reverse<void> {
+        using Type = TypeTuple<void>;
     };
 };
