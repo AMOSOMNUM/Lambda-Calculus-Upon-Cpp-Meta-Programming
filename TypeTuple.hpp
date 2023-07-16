@@ -16,7 +16,7 @@ inline namespace _TypeTuple {
 
     template<typename Current = void, typename...Types>
     struct TypeTuple {
-        static constexpr unsigned size = sizeof...(Types) + 1;
+        static constexpr int size = sizeof...(Types) + 1;
         using Next = TypeTuple<Types...>;
         using Front = Current;
 
@@ -37,7 +37,7 @@ inline namespace _TypeTuple {
     template<typename Current>
     struct TypeTuple<Current> {
         using Next = TypeTuple<void>;
-        static constexpr unsigned size = 1;
+        static constexpr int size = 1;
         using Front = Current;
 
         template<int index, typename = std::enable_if_t<index == 1>>
@@ -46,7 +46,7 @@ inline namespace _TypeTuple {
 
     template<>
     struct TypeTuple<void> {
-        static constexpr unsigned size = 0;
+        static constexpr int size = 0;
     };
 
     template<typename U, typename V>
@@ -117,12 +117,12 @@ inline namespace _TypeTuple {
         using Left = TypeTuple<void>;
     };
 
-    template<int n, typename Value, typename Source, typename = std::enable_if_t<(n <= Source::size)>>
+    template<int n, typename Value, typename Source, typename = std::enable_if_t<(n <= Source::size && n > 0)>>
     struct Alter;
 
     template<int n, typename Value, typename...Args>
     struct Alter<n, Value, TypeTuple<Args...>> {
-        using Type = Merge<typename Front<n, TypeTuple<Args...>>::Left, typename Merge<typename Front<n - 1, TypeTuple<Args...>>::Type, Value>::Type>::Type;
+        using Type = Merge<typename Merge<typename Front<n - 1, TypeTuple<Args...>>::Type, Value>::Type, typename Front<n, TypeTuple<Args...>>::Left>::Type;
     };
 
     template<typename Current = void, typename...Args>
