@@ -19,54 +19,26 @@ namespace Lambda {
         using Type = T::template Prototype<Params...>;
     };
 
-    template<template<Valid...> typename T, Valid...Args>
-    struct Rebind<T<Args...>, TypeTuple<Args...>> {
-        struct Fallback {
-            template<typename...>
-            using Calculate = T<Args...>;
-        };
-        using Type = Fallback;
-    };
-
-    //Impossible Fallback
-    template<int n, typename tuple, int progress = 0, typename Result = TypeTuple<>>
-    struct Arrange {
-        using Type = tuple;
-        using Left = TypeTuple<>;
-    };
-
-    template<int n, Valid...Args>
-    struct Arrange<n, TypeTuple<Args...>> {
-        using Base = Front<n, TypeTuple<Args...>>;
-        using Params = Base::Type;
-        using Left = Base::Left;
-        using Type = __If<Left::size == 0, Params, typename Arrange<n, Params, 1, Left>::Type>::Type;
-    };
-
-    template<int n, typename ParamList, int progress, Valid...Args>
-    struct Arrange<n, ParamList, progress, TypeTuple<Args...>> {
-        using Current = ParamList::template Type<progress>;
-        using CurrentParams = Merge<typename Current::Params, TypeTuple<Args...>>::Type;
-        using Base = Arrange<Current::required, CurrentParams>;
-        using Left = Base::Left;
-        using Result = Alter<progress, typename Rebind<Current, typename Base::Type>::Type, ParamList>::Type;
-        using Type = __If<progress == n, Result, typename Arrange<n, Left, progress + 1, Result>::Type>::Type;
-    };
-
     template<int n, Valid...Args>
     struct LambdaCalculus {
         using Check = std::enable_if_t<sizeof...(Args) <= n>;
         static constexpr int required = n;
         using Params = TypeTuple<Args...>;
-        template<Valid...Others>
-        using Normalised = Arrange<required, TypeTuple<Args..., Others...>>::Type;
-        template<Valid...Others>
-        static constexpr bool too_few = sizeof...(Args) + sizeof...(Others) < required;
+        template<Valid Other>
+        static constexpr bool too_much = sizeof...(Args) + 1 > required;
 
-        template<Valid T, Valid...Others>
-        using Return = Rebind<T, Normalised<Others...>>::Type::Call;
+        template<Valid T, Valid Other, bool = too_much<Other>>
+        struct AUX_Apply;
         template<Valid T, Valid Other>
-        using Apply = __If<too_few<Other>, typename T::template Prototype<Args..., Other>, Return<T, Other>>::Type;
+        struct AUX_Apply<T, Other, false> {
+            using Type = T::template Prototype<Args..., Other>::Call;
+        };
+        template<Valid T, Valid Other>
+        struct AUX_Apply<T, Other, true> {
+            using Type = T::template Apply<Other>;
+        };
+        template<Valid T, Valid Other>
+        using Apply = AUX_Apply<T, Other>::Type;
 
         template<Valid T, Valid Current, Valid...Others>
         struct AUX_AUX_Calculate {
@@ -205,17 +177,16 @@ namespace Lambda {
         using Calculate = Base::template Calculate<Identity, Others...>;
     };
 
-    template<Valid Expression, int n = 0>
-    struct Let : public LambdaCalculusBase {
-        using Base = LambdaCalculus<n>;
-        static constexpr int required = Base::required;
-        template<typename Args = TypeTuple<void>, bool = Args::size == required>
+    template<Valid Expression, int n>
+    struct _Let {
+        template<typename Args = TypeTuple<void>, bool = Args::size == n>
         struct Type;
         template<Valid...Args>
         struct Type<TypeTuple<Args...>, false> : public LambdaCalculusBase {
-            static constexpr int required = n - sizeof...(Args);
+            using Base = LambdaCalculus<n, Args...>;
+            static constexpr int required = Base::required;
             template<Valid...Params>
-            using Prototype = Type<TypeTuple<Args..., Params...>>;
+            using Prototype = std::enable_if_t<(sizeof...(Params) <= n), Type<TypeTuple<Params...>>>;
             using Call = Type;
             template<Valid Other>
             using Apply = Base::template Apply<Type, Other>;
@@ -224,40 +195,37 @@ namespace Lambda {
         };
         template<Valid...Args>
         struct Type<TypeTuple<Args...>, true> : public LambdaCalculusBase {
-            static constexpr int required = n - sizeof...(Args);
+            using Base = LambdaCalculus<n, Args...>;
+            static constexpr int required = Base::required;
             template<Valid...Params>
-            using Prototype = Type<TypeTuple<Args..., Params...>>;
+            using Prototype = std::enable_if_t<(sizeof...(Params) <= n), Type<TypeTuple<Params...>>>;
             using Call = Expression::template Calculate<Args...>;
             template<Valid Other>
-            using Apply = Base::template Apply<Type, Other>;
+            using Apply = Call::template Apply<Other>;
             template<Valid...Others>
-            using Calculate = Base::template Calculate<Prototype<>, Others...>;
+            using Calculate = Call::template Calculate<Others...>;
         };
         template<bool Boolean>
         struct Type<TypeTuple<void>, Boolean> : public LambdaCalculusBase {
-            static constexpr int required = n;
+            using Base = LambdaCalculus<n>;
+            static constexpr int required = Base::required;
             template<Valid...Params>
-            using Prototype = Type<TypeTuple<Params...>>;
-            using Call = Expression::Call;
+            using Prototype = std::enable_if_t<(sizeof...(Params) <= n), Type<TypeTuple<Params...>>>;
+            using Call = Type;
             template<Valid Other>
             using Apply = Base::template Apply<Type, Other>;
             template<Valid...Others>
             using Calculate = Base::template Calculate<Prototype<>, Others...>;
         };
-
-        template<Valid...Params>
-        using Prototype = Type<TypeTuple<Params...>>;
-        using Call = Prototype<>::Call;
-        template<Valid Other>
-        using Apply = Prototype<>::template Apply<Other>;
-        template<Valid...Others>
-        using Calculate = Prototype<>::template Calculate<Others...>;;
     };
+
+    template<Valid Expression, int n = 0, Valid...Args>
+    using Let = std::enable_if_t<(n >= sizeof...(Args)), typename _Let<Expression, n>::template Type<Args...>>;
 
     struct IndexBase {};
 
     template<int m, int n, typename = std::enable_if_t<(m > 0 && n > 0)>>
-    struct Index : public IndexBase {
+        struct Index : public IndexBase {
         constexpr static int Loc = m;
         constexpr static int Qty = n;
     };
@@ -275,7 +243,7 @@ namespace Lambda {
         constexpr static int Loc = Orders::template Type<Current::Loc>::Loc;
         constexpr static int sum = (Order::Qty + ...);
     };
-    
+
     template<ValidIndex...Order>
     struct CurrentIndex<TypeTuple<Order...>, Index<sizeof...(Order), TypeTuple<Order...>::template Type<sizeof...(Order)>::Qty>> {
         using Inc = CurrentIndex<TypeTuple<Order...>, IndexBase>;
@@ -284,7 +252,7 @@ namespace Lambda {
     };
 
     template <Valid Result, typename Left>
-    struct Reduce; 
+    struct Reduce;
     template <Valid Result, Valid Front, Valid...Left>
     struct Reduce<Result, TypeTuple<Front, Left...>> {
         using Type = Reduce<typename Result::template Apply<Front>, TypeTuple<Left...>>::Type;
@@ -316,7 +284,7 @@ namespace Lambda {
             using ParamsChanged = Alter<Current::Loc, typename Result::template Type<Current::Loc>::template Apply<T>, Result>::Type;
             using Type = Ordered<typename Current::Inc, TypeTuple<Args...>, left, ParamsChanged>::Type;
         };
-        
+
         template<typename Current, Valid...Others, Valid...Args>
         struct Ordered<Current, TypeTuple<Others...>, 0, TypeTuple<Args...>> {
             using Type = Compose<Args...>::template Calculate<Others...>;
@@ -324,7 +292,7 @@ namespace Lambda {
 
         template<typename Current, Valid...Args>
         struct Ordered<Current, TypeTuple<void>, 0, TypeTuple<Args...>> {
-            using Type = Compose<Args...>::template Call;
+            using Type = Compose<Args...>::Call;
         };
 
         template<typename Current, int left, typename Result>
@@ -347,7 +315,7 @@ namespace Lambda {
     };
 
     template<int n, typename = std::enable_if_t<(n > 0)>>
-    struct ComposeN : public LambdaCalculusBase {
+        struct ComposeN : public LambdaCalculusBase {
         using Base = LambdaCalculus<n>;
         static constexpr int required = Base::required;
         template<typename Args = TypeTuple<void>, bool = Args::size == required>
@@ -417,11 +385,17 @@ namespace Lambda {
         using Calculate = Base::template Calculate<Prototype<>, Others...>;
     };
 
-    template<Valid...Args>
-    using AND = Compose<typename ComposeN<2>::template Calculate<Args...>, False<>>;
+    template<auto = 'x'>
+    using L = ComposeN<1>;
 
     template<Valid...Args>
-    using OR = Compose<ComposeN<1>, True<>, ComposeN<1>>::SetOrder<Index<1, 1>, Index<3, 1>>::Calculate<Args...>;
+    using AND = Let<Compose<L<'a'>, L<'b'>, False<>>::SetOrder<Index<1, 1>, Index<2, 1>>, 2, Args...>;
+
+    template<Valid...Args>
+    using OR = Let<Compose<L<'a'>, True<>, L<'b'>>::SetOrder<Index<1, 1>, Index<3, 1>>, 2, Args...>;
+
+    template<Valid...Args>
+    using NOT = Let<Compose<L<'x'>, False<>, True<>>, 1, Args...>;
 }
 
 #endif
