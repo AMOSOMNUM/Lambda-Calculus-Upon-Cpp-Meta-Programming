@@ -3,8 +3,6 @@
 
 #include "TypeTuple.hpp"
 
-#include <string>
-
 namespace Lambda {
     class LambdaCalculusBase {};
 
@@ -224,30 +222,44 @@ namespace Lambda {
 
     struct IndexBase {};
 
-    template<int m, int n, typename = std::enable_if_t<(m > 0 && n > 0)>>
-        struct Index : public IndexBase {
-        constexpr static int Loc = m;
+    template<int m, int n = 1, typename = std::enable_if_t<(m > 0 && n > 0)>>
+    struct Index : public IndexBase {
         constexpr static int Qty = n;
+        constexpr static int Loc[] = { m };
+        constexpr static int size = 1;
+    };
+
+    template<int...index>
+    struct Repeat : public IndexBase {
+        constexpr static int Qty = 1;
+        constexpr static int Loc[] = { index... };
+        constexpr static int size = sizeof...(index);
     };
 
     template<typename T>
     concept ValidIndex = std::is_base_of_v<IndexBase, T>;
 
     template<typename Order, ValidIndex Current = Index<1, 1>>
-    struct CurrentIndex;
+    struct CurrentIndex {};
 
     template<ValidIndex...Order, ValidIndex Current>
     struct CurrentIndex<TypeTuple<Order...>, Current> {
         using Orders = TypeTuple<Order...>;
-        using Inc = CurrentIndex<Orders, typename __If<((Orders::template Type<Current::Loc>::Qty) > (Current::Qty)), Index<Current::Loc, Current::Qty + 1>, Index<Current::Loc + 1, 1>>::Type>;
-        constexpr static int Loc = Orders::template Type<Current::Loc>::Loc;
+        using Type = Orders::template Type<Current::Loc[0]>;
+        using Inc = CurrentIndex<Orders, typename __If<(Type::Qty > Current::Qty), Index<Current::Loc[0], Current::Qty + 1>, Index<Current::Loc[0] + 1>>::Type>;
+        constexpr static int size = Type::size;
+        template<int index = 0, typename = std::enable_if_t<(index < size)>>
+        constexpr static int Loc = Type::Loc[index];
         constexpr static int sum = (Order::Qty + ...);
     };
 
     template<ValidIndex...Order>
     struct CurrentIndex<TypeTuple<Order...>, Index<sizeof...(Order), TypeTuple<Order...>::template Type<sizeof...(Order)>::Qty>> {
         using Inc = CurrentIndex<TypeTuple<Order...>, IndexBase>;
-        constexpr static int Loc = TypeTuple<Order...>::template Type<sizeof...(Order)>::Loc;
+        using Type = TypeTuple<Order...>::template Type<sizeof...(Order)>;
+        constexpr static int size = Type::size;
+        template<int index = 0, typename = std::enable_if_t<(index < size)>>
+        constexpr static int Loc = Type::Loc[index];
         constexpr static int sum = (Order::Qty + ...);
     };
 
@@ -281,7 +293,18 @@ namespace Lambda {
 
         template<typename Current, Valid T, Valid...Args, int left, typename Result>
         struct Ordered<Current, TypeTuple<T, Args...>, left, Result> {
-            using ParamsChanged = Alter<Current::Loc, typename Result::template Type<Current::Loc>::template Apply<T>, Result>::Type;
+            template<int Loc, typename Result>
+            using Changed = Alter<Loc, typename Result::template Type<Loc>::template Apply<T>, Result>::Type;
+
+            template<int index = 0>
+            struct RecChange {
+                using Type = Changed<Current::template Loc<index>, typename RecChange<index + 1>::Type>;
+            };
+            template<>
+            struct RecChange<Current::Type::size> {
+                using Type = Result;
+            };
+            using ParamsChanged = RecChange<>::Type;
             using Type = Ordered<typename Current::Inc, TypeTuple<Args...>, left, ParamsChanged>::Type;
         };
 
@@ -389,13 +412,13 @@ namespace Lambda {
     using L = ComposeN<1>;
 
     template<Valid...Args>
-    using AND = Let<Compose<L<'a'>, L<'b'>, False<>>::SetOrder<Index<1, 1>, Index<2, 1>>, 2, Args...>;
+    using AND = Let<Compose<L<'a'>, L<'b'>, False<>>::SetOrder<Index<1>, Index<2>>, 2, Args...>;
 
     template<Valid...Args>
-    using OR = Let<Compose<L<'a'>, True<>, L<'b'>>::SetOrder<Index<1, 1>, Index<3, 1>>, 2, Args...>;
+    using OR = Let<Compose<L<'a'>, True<>, L<'b'>>::SetOrder<Index<1>, Index<3>>, 2, Args...>;
 
     template<Valid...Args>
-    using NOT = Let<Compose<L<'x'>, False<>, True<>>, 1, Args...>;
+    using NOT = Let<Compose<L<'x'>, False<>, True<>>::SetOrder<Index<1>>, 1, Args...>;
 }
 
 #endif
