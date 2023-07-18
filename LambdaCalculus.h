@@ -17,6 +17,22 @@ namespace Lambda {
         using Type = T::template Prototype<Params...>;
     };
 
+    struct None : public LambdaCalculusBase {
+        using Call = None;
+        template<Valid Other>
+        using Apply = Other;
+        template<Valid...>
+        struct AUX {
+            using Type = None;
+        };
+        template<Valid T, Valid...Args>
+        struct AUX<T, Args...> {
+            using Type = T::template Calculate<Args...>;
+        };
+        template<Valid...Others>
+        using Calculate = AUX<Others...>::Type;
+    };
+
     template<int n, Valid...Args>
     struct LambdaCalculus {
         using Check = std::enable_if_t<sizeof...(Args) <= n>;
@@ -34,6 +50,10 @@ namespace Lambda {
         template<Valid T, Valid Other>
         struct AUX_Apply<T, Other, true> {
             using Type = T::template Apply<Other>;
+        };
+        template<Valid T, bool Boolean>
+        struct AUX_Apply<T, None, Boolean> {
+            using Type = T;
         };
         template<Valid T, Valid Other>
         using Apply = AUX_Apply<T, Other>::Type;
@@ -218,7 +238,7 @@ namespace Lambda {
     };
 
     template<Valid Expression, int n = 0, Valid...Args>
-    using Let = std::enable_if_t<(n >= sizeof...(Args)), typename _Let<Expression, n>::template Type<Args...>>;
+    using Let = std::enable_if_t<(n >= sizeof...(Args)), typename _Let<Expression, n>::template Type<TypeTuple<Args...>>>;
 
     struct IndexBase {};
 
@@ -234,6 +254,13 @@ namespace Lambda {
         constexpr static int Qty = 1;
         constexpr static int Loc[] = { index... };
         constexpr static int size = sizeof...(index);
+    };
+
+    template<>
+    struct Repeat<> : public IndexBase {
+        constexpr static int Qty = 1;
+        constexpr static int Loc[1] = { -1 };
+        constexpr static int size = 0;
     };
 
     template<typename T>
@@ -301,7 +328,7 @@ namespace Lambda {
                 using Type = Changed<Current::template Loc<index>, typename RecChange<index + 1>::Type>;
             };
             template<>
-            struct RecChange<Current::Type::size> {
+            struct RecChange<Current::size> {
                 using Type = Result;
             };
             using ParamsChanged = RecChange<>::Type;
@@ -328,7 +355,7 @@ namespace Lambda {
             using Prototype = Ordered<Current, TypeTuple<Params...>, left - sizeof...(Params), Result>::Type;
             using Call = Ordered;
             template<Valid Other>
-            using Apply = Ordered<Current, TypeTuple<Other>, left - 1, Result>::Type;
+            using Apply = Base::template Apply<Ordered, Other>;
             template<Valid...Others>
             using Calculate = Base::template Calculate<Ordered, Others...>;
         };
@@ -338,7 +365,7 @@ namespace Lambda {
     };
 
     template<int n, typename = std::enable_if_t<(n > 0)>>
-        struct ComposeN : public LambdaCalculusBase {
+    struct ComposeN : public LambdaCalculusBase {
         using Base = LambdaCalculus<n>;
         static constexpr int required = Base::required;
         template<typename Args = TypeTuple<void>, bool = Args::size == required>
@@ -419,6 +446,30 @@ namespace Lambda {
 
     template<Valid...Args>
     using NOT = Let<Compose<L<'x'>, False<>, True<>>::SetOrder<Index<1>>, 1, Args...>;
+
+    template<int n, int loc, int index = 1, int...pack>
+    struct RepeatN {
+        using Type = RepeatN<n, loc, index + 1, pack..., loc>::Type;
+    };
+    template<int n, int loc, int...pack>
+    struct RepeatN<n, loc, n, pack...> {
+        using Type = Repeat<pack..., loc>;
+    };
+
+    template<Valid...Args>
+    using Inc = Let<Compose<L<'f'>, Compose<L<'n'>, L<'f'>, L<'x'>>::SetOrder<Index<1>, Index<2>, Index<3>>>::SetOrder<Index<2>, Repeat<1, 2>, Index<2>>, 1, Args...>;
+
+    template<unsigned n>
+    struct _N : public Value<unsigned, n> {
+        using Type = Inc<_N<n - 1>>;
+    };
+    template<>
+    struct _N<0> : public Value<unsigned, 0> {
+        using Type = Compose<None, L<'x'>>::SetOrder<Repeat<>, Index<2>>;
+    };
+
+    template<unsigned n>
+    using N = _N<n>::Type;
 }
 
 #endif
