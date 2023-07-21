@@ -24,8 +24,6 @@ namespace Lambda {
 		static constexpr BasicType type = BasicType::None;
 		static constexpr int required = 0;
 
-		template<typename ...>
-		using Prototype = None;
 		using Call = None;
 		template<Valid Other>
 		using Apply = Other;
@@ -311,7 +309,48 @@ namespace Lambda {
 				using AfterProcess = Tuple;
 				using Type = Tuple;
 			};
-			using Type = TryEvaluation<typename RemoveFirstCompose<typename RemoveNone<Params>::Type>::Type>::Type;
+
+			template<Valid T, BasicType = T::type>
+			struct RemoveBracket {
+				using Type = T;
+			};
+			template<Valid T>
+			struct RemoveBracket<T, BasicType::Conjunction> {
+				template<typename Tuple = typename T::Params, int = Tuple::size>
+				struct Process {
+					using Type = T;
+				};
+				template<typename Tuple>
+				struct Process<Tuple, 1> {
+					using Type = Tuple::Front;
+				};
+				template<typename Tuple>
+				struct Process<Tuple, 0> {
+					using Type = None;
+				};
+				using Type = Process<>::Type;
+			};
+			template<Valid T>
+			struct RemoveBracket<T, BasicType::Expression> {				
+				using Type = __If<T::Labels::size == 0, typename T::InnerExpression, T>::Type;
+			};
+
+			template<typename Tuple, int index = 1, int = Tuple::size>
+			struct SimplifyEach {
+				using Result = Alter<index, typename RemoveBracket<typename Tuple::template Type<index>::Call>::Type, Tuple>::Type;
+				using Type = SimplifyEach<Result, index + 1>::Type;
+			};
+			template<typename Tuple, int index>
+			struct SimplifyEach<Tuple, index, index> {
+				using Result = Alter<index, typename RemoveBracket<typename Tuple::template Type<index>::Call>::Type, Tuple>::Type;
+				using Type = Result;
+			};
+			template<int index>
+			struct SimplifyEach<TypeTuple<void>, index> {
+				using Type = TypeTuple<void>;
+			};
+
+			using Type = SimplifyEach<typename TryEvaluation<typename RemoveFirstCompose<typename RemoveNone<Params>::Type>::Type>::Type>::Type;
 		};
 
 		template<typename _Args, bool = std::is_same_v<Params, _Args>>
@@ -345,7 +384,7 @@ namespace Lambda {
 		template<Valid Arg>
 		using Apply = __If<std::is_same_v<Arg, None>, Compose, Prototype<typename Merge<Params, Arg>::Type>>::Type;
 		template<Valid..._Args>
-		using Calculate = LambdaCalculus::template Calculate<Prototype<>, _Args...>;
+		using Calculate = LambdaCalculus::template Calculate<Call, _Args...>;
 
 		static std::string print() {
 			return ("(" + ... + (Args::print() + std::string(" "))) + std::string(")");
@@ -383,7 +422,7 @@ namespace Lambda {
 
 		template<typename OuterOrder, Valid T>
 		struct Simplify {
-			template<typename Simplified = typename T::template Prototype<>, bool = Simplified::type == BasicType::Conjunction>
+			template<typename Simplified = typename T::Call, bool = Simplified::type == BasicType::Conjunction>
 			struct RemoveConjunction {
 				using Type = Simplified;
 			};
@@ -568,10 +607,40 @@ namespace Lambda {
 		}
 	};
 
+	template<Valid ...Args>
+	struct _Flow {
+		using Type = Compose<>::Prototype<typename Reverse<Args...>::Type>;
+	};
+	template<Valid ...Args>
+	using Flow = _Flow<Args...>::Type;
+
+	template <unsigned n, Valid T, Valid...Args>
+	struct __N {
+		template<int index = 1, bool = index == n>
+		struct Rec {
+			using Type = Compose<T, typename Rec<index + 1>::Type>;
+		};
+		template<int index>
+		struct Rec<index, true> {
+			using Type = Compose<T, Args...>;
+		};
+		using Type = Rec<>::Type;
+	};
+	template <Valid T, Valid...Args>
+	struct __N<0, T, Args...> {
+		using Type = Compose<Args...>;
+	};
+
+	template <unsigned n, Valid T, Valid...Args>
+	using _N = __N<n, T, Args...>::Type;
+
 	using True = Expression<Order<L<'a'>, L<'b'>>, L<'a'>>;
 	using False = Expression<Order<L<'a'>, L<'b'>>, L<'b'>>;
 	using If = Expression<Order<L<'p'>, L<'a'>, L<'b'>>, Compose<L<'p'>, L<'a'>, L<'b'>>>;
 	using Identity = Expression<Order<L<'x'>>, L<'x'>>;
+	template<unsigned n>
+	using N = Expression<Order<L<'f'>, L<'x'>>, _N<n, L<'f'>, L<'x'>>>::Call;
+	using Succ = Expression<Order<L<'n'>, L<'f'>, L<'x'>>, Compose<L<'f'>, Compose<L<'n'>, L<'f'>, L<'x'>>>>;
 }
 
 #endif
