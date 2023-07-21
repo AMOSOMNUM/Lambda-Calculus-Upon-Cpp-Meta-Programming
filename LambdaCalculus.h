@@ -24,6 +24,8 @@ namespace Lambda {
 		static constexpr BasicType type = BasicType::None;
 		static constexpr int required = 0;
 
+		template<typename ...>
+		using Prototype = None;
 		using Call = None;
 		template<Valid Other>
 		using Apply = Other;
@@ -83,7 +85,7 @@ namespace Lambda {
 	struct Value : public LambdaCalculusBase {
 		static constexpr Type value = v;
 	};
-	
+
 	template<typename Expression, Valid Result = None>
 	struct Reduce {
 		using Type = Reduce<typename Expression::Next, typename Result::template Apply<typename Expression::Front>>::Type;
@@ -94,7 +96,7 @@ namespace Lambda {
 	};
 	*/
 	constexpr char LABEL_DEFAULT_CHARSET[] = {
-		'x', 'y', 'z', 'a', 'b', 'c', 'd', 'm', 'p', 'q', 'r', 't', 'u', 'v', 'w', 'f', 'g', 'h', 'o', 'n'
+		't', 'x', 'y', 'z', 'a', 'b', 'c', 'd', 'm', 'p', 'q', 'r', 'k', 'u', 'v', 'w', 'f', 'g', 'h', 'o', 'n'
 	};
 
 	template<char label>
@@ -282,7 +284,7 @@ namespace Lambda {
 			};
 
 			template<typename Tuple, bool = (Tuple::size > 1)>
-			struct TryEvaluation {
+				struct TryEvaluation {
 				template<typename Front = typename Tuple::Front, typename Arg = typename Tuple::Next::Front, typename Left = typename Tuple::Next::Next, bool = Front::type == BasicType::Label>
 				struct Process {
 					using Type = Merge<typename Front::template Apply<Arg>, Left>::Type;
@@ -472,9 +474,9 @@ namespace Lambda {
 			};
 			template<Label _>
 			struct LabelDealer<_, BasicType::Label> {
-				template<typename T = Prototype<>, bool = Labels::template find<Arg>()>
+				template<typename T = Prototype<>, bool = T::Labels::template find<Arg>()>
 				struct Process {
-					using NewLabel = CreateNewLabel<TypeTuple<Arg>, Labels, typename T::Uncovered>::Type;
+					using NewLabel = CreateNewLabel<TypeTuple<Arg>, typename T::Labels, typename T::Uncovered>::Type;
 					using Type = typename T::template SelfChange<Arg, NewLabel>;
 				};
 				template<typename T>
@@ -485,9 +487,43 @@ namespace Lambda {
 				using Current = Changed::Labels::Front;
 				using Type = Prototype<typename Changed::InnerExpression::template Replace<Current, Arg>, typename Changed::Labels::Next>;
 			};
-			//To Do
-			//struct LabelDealer<_, BasicType::Conjunction>
-			//struct LabelDealer<_, BasicType::Expression>
+			template<Valid _>
+			struct LabelDealer<_, BasicType::Expression> {
+				template<typename Left, typename Labels, typename Last = TypeTuple<void>>
+				struct IsConflict {
+					static constexpr bool found = Labels::template find<typename Left::Front>();
+					using Result = __If<found, typename Merge<Last, typename Left::Front>::Type, Last>::Type;
+					using Type = IsConflict<typename Left::Next, Labels, Result>::Type;
+				};
+				template<typename Labels, typename Result>
+				struct IsConflict<TypeTuple<void>, Labels, Result> {
+					using Type = Result;
+				};
+
+				template<typename T = Prototype<>, bool = Arg::curried && !std::is_same_v<typename IsConflict<typename T::Labels, typename Arg::Uncovered>::Type, TypeTuple<void>>>
+				struct Process {
+					using Conflict = IsConflict<typename T::Labels, typename Arg::Uncovered>::Type;
+					template<typename Left = Conflict, typename Last = T>
+					struct RecChange {
+						using NewLabel = CreateNewLabel<typename Arg::Uncovered, typename T::Labels, typename T::Uncovered>::Type;
+						using Result = typename T::template SelfChange<typename Left::Front, NewLabel>;
+						using Type = RecChange<typename Left::Next, Result>::Type;
+					};
+					template<typename Result>
+					struct RecChange<TypeTuple<void>, Result> {
+						using Type = Result;
+					};
+					using Type = RecChange<>::Type;
+				};
+				template<typename T>
+				struct Process<T, false> {
+					using Type = T;
+				};
+
+				using Changed = Process<>::Type;
+				using Current = Changed::Labels::Front;
+				using Type = Prototype<typename Changed::InnerExpression::template Replace<Current, Arg>, typename Changed::Labels::Next>;
+			};
 			using Type = LabelDealer<>::Type;
 		};
 		template<Valid Arg>
