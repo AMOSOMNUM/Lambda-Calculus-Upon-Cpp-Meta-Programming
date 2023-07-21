@@ -2,474 +2,540 @@
 #define __H_LAMBDA_CALCULUS__
 
 #include "TypeTuple.hpp"
+#include <string>
 
 namespace Lambda {
-    class LambdaCalculusBase {};
+	class LambdaCalculusBase {};
 
-    template<typename T>
-    concept Valid = std::is_base_of_v<LambdaCalculusBase, T>;
+	template<typename T>
+	concept Valid = std::is_base_of_v<LambdaCalculusBase, T>;
 
-    template<Valid T, typename Params>
-    struct Rebind;
+	enum class BasicType {
+		Label,
+		Expression,
+		Conjunction,
+		None
+	};
 
-    template<Valid T, Valid...Params>
-    struct Rebind<T, TypeTuple<Params...>> {
-        using Type = T::template Prototype<Params...>;
-    };
+	template<typename T>
+	concept Label = std::is_base_of_v<LambdaCalculusBase, T>&& T::type == BasicType::Label;
 
-    struct None : public LambdaCalculusBase {
-        using Call = None;
-        template<Valid Other>
-        using Apply = Other;
-        template<Valid...>
-        struct AUX {
-            using Type = None;
-        };
-        template<Valid T, Valid...Args>
-        struct AUX<T, Args...> {
-            using Type = T::template Calculate<Args...>;
-        };
-        template<Valid...Others>
-        using Calculate = AUX<Others...>::Type;
-    };
+	struct None : public LambdaCalculusBase {
+		static constexpr BasicType type = BasicType::None;
+		static constexpr int required = 0;
 
-    template<int n, Valid...Args>
-    struct LambdaCalculus {
-        using Check = std::enable_if_t<sizeof...(Args) <= n>;
-        static constexpr int required = n;
-        using Params = TypeTuple<Args...>;
-        template<Valid Other>
-        static constexpr bool too_much = sizeof...(Args) + 1 > required;
+		using Call = None;
+		template<Valid Other>
+		using Apply = Other;
+		template<Valid...>
+		struct AUX {
+			using Type = None;
+		};
+		template<Valid T, Valid...Args>
+		struct AUX<T, Args...> {
+			using Type = T::template Calculate<Args...>;
+		};
+		template<Label label, Valid T>
+		using Replace = None;
+		template<Label old, Label nov>
+		using Change = None;
+		template<Valid...Others>
+		using Calculate = AUX<Others...>::Type;
 
-        template<Valid T, Valid Other, bool = too_much<Other>>
-        struct AUX_Apply;
-        template<Valid T, Valid Other>
-        struct AUX_Apply<T, Other, false> {
-            using Type = T::template Prototype<Args..., Other>::Call;
-        };
-        template<Valid T, Valid Other>
-        struct AUX_Apply<T, Other, true> {
-            using Type = T::template Apply<Other>;
-        };
-        template<Valid T, bool Boolean>
-        struct AUX_Apply<T, None, Boolean> {
-            using Type = T;
-        };
-        template<Valid T, Valid Other>
-        using Apply = AUX_Apply<T, Other>::Type;
+		static std::string print() {
+			return "";
+		}
+	};
 
-        template<Valid T, Valid Current, Valid...Others>
-        struct AUX_AUX_Calculate {
-            using Type = Apply<T, Current>::Call::template Calculate<Others...>;
-        };
-        template<Valid T, Valid Current>
-        struct AUX_AUX_Calculate<T, Current> {
-            using Type = Apply<T, Current>::Call;
-        };
-        template<Valid T, Valid...Others>
-        struct AUX_Calculate {
-            using Type = AUX_AUX_Calculate<T, Others...>::Type;
-        };
-        template<Valid T>
-        struct AUX_Calculate<T> {
-            using Type = T::Call;
-        };
-        template<Valid T, Valid...Others>
-        using Calculate = AUX_Calculate<T, Others...>::Type;
-    };
+	struct LambdaCalculus {
+		template<Valid T, Valid Other>
+		struct _Apply {
+			using Type = T::template Apply<Other>;
+		};
+		template<Valid T>
+		struct _Apply<T, None> {
+			using Type = T;
+		};
+		template<Valid T, Valid Other>
+		using Apply = _Apply<T, Other>::Type;
 
-    template<Valid...Args>
-    struct If : public LambdaCalculusBase {
-        using Base = LambdaCalculus<3, Args...>;
-        static constexpr int required = Base::required;
+		template<Valid T, Valid Current, Valid...Others>
+		struct __Calculate {
+			using Type = Apply<T, Current>::template Calculate<Others...>;
+		};
+		template<Valid T, Valid Current>
+		struct __Calculate<T, Current> {
+			using Type = Apply<T, Current>::Call;
+		};
+		template<Valid T, Valid...Others>
+		struct _Calculate {
+			using Type = __Calculate<T, Others...>::Type;
+		};
+		template<Valid T>
+		struct _Calculate<T> {
+			using Type = T::Call;
+		};
+		template<Valid T, Valid...Others>
+		using Calculate = _Calculate<T, Others...>::Type;
+	};
+	/*
+	template<typename Type, Type v>
+	struct Value : public LambdaCalculusBase {
+		static constexpr Type value = v;
+	};
+	
+	template<typename Expression, Valid Result = None>
+	struct Reduce {
+		using Type = Reduce<typename Expression::Next, typename Result::template Apply<typename Expression::Front>>::Type;
+	};
+	template<Valid Result>
+	struct Reduce<TypeTuple<void>, Result> {
+		using Type = Result;
+	};
+	*/
+	constexpr char LABEL_DEFAULT_CHARSET[] = {
+		'x', 'y', 'z', 'a', 'b', 'c', 'd', 'm', 'p', 'q', 'r', 't', 'u', 'v', 'w', 'f', 'g', 'h', 'o', 'n'
+	};
 
-        template<Valid...Params>
-        using Prototype = If<Params...>;
-        using Call = If;
-        template<Valid Other>
-        using Apply = Base::template Apply<If, Other>;
-        template<Valid...Others>
-        using Calculate = Base::template Calculate<If, Others...>;
-    };
+	template<char label>
+	struct L : public LambdaCalculusBase {
+		static constexpr BasicType type = BasicType::Label;
+		static constexpr int required = 0;
+		using Labels = TypeTuple<L>;
 
-    template<Valid P, Valid T, Valid F>
-    struct If<P, T, F> : public LambdaCalculusBase {
-        using Base = LambdaCalculus<3, P, T, F>;
-        static constexpr int required = Base::required;
+		template<char NewLabel = label>
+		using Prototype = L<NewLabel>;
 
-        template<Valid...Params>
-        using Prototype = If<Params...>;
-        using Call = P::template Calculate<T, F>;
-        template<Valid Other>
-        using Apply = Base::template Apply<If, Other>;
-        template<Valid...Others>
-        using Calculate = Base::template Calculate<If, Others...>;
-    };
+		using Call = Prototype<>;
+		template<Label Other, Valid T>
+		using Replace = __If<std::is_same_v<Prototype<>, Other>, T, Prototype<>>::Type;
+		template<Label old, Label nov>
+		using Change = Replace<old, nov>;
+		template<Valid Arg>
+		using Apply = __If<std::is_same_v<Arg, None>, Prototype<>, Arg>::Type;
+		template<Valid...Args>
+		using Calculate = LambdaCalculus::template Calculate<Prototype<>, Args...>;
 
-    template<typename Type, Type v>
-    struct Value : public LambdaCalculusBase {
-        static constexpr Type value = v;
-    };
+		static char print() {
+			return label;
+		}
+	};
 
-    template<Valid...Args>
-    struct True : public Value<bool, true> {
-        using Base = LambdaCalculus<2, Args...>;
-        static constexpr int required = Base::required;
+	template<Label label, typename Outer, typename Inner, typename Uncovered>
+	constexpr bool exists = Outer::template find<label>() | Inner::template find<label>() | Uncovered::template find<label>();
 
-        template<Valid...Params>
-        using Prototype = True<Params...>;
-        using Call = True;
-        template<Valid Other>
-        using Apply = Base::template Apply<True, Other>;
-        template<Valid...Others>
-        using Calculate = Base::template Calculate<True, Others...>;
-    };
+	template<typename Outer, typename Inner, typename Uncovered, int index = 0, bool isExist = exists<L<LABEL_DEFAULT_CHARSET[index]>, Outer, Inner, Uncovered>>
+	struct CreateNewLabel {
+		using Type = L<LABEL_DEFAULT_CHARSET[index]>;
+	};
+	template<typename Outer, typename Inner, typename Uncovered, int index>
+	struct CreateNewLabel<Outer, Inner, Uncovered, index, true> {
+		using Type = CreateNewLabel<Outer, Inner, Uncovered, index + 1>::Type;
+	};
+	template<typename Outer, typename Inner, typename Uncovered>
+	struct CreateNewLabel<Outer, Inner, Uncovered, sizeof(LABEL_DEFAULT_CHARSET) / sizeof(char) - 1, true> {
+		using Type = L<'?'>;
+	};
 
-    template<Valid T, Valid F>
-    struct True<T, F> : public Value<bool, true> {
-        using Base = LambdaCalculus<2, T, F>;
-        static constexpr int required = Base::required;
+	template<Valid...Args>
+	struct LabelInfoBuilder {
+		using Params = TypeTuple<Args...>;
+		template<typename Left = Params, typename Result = TypeTuple<void>>
+		struct Rec {
+			template<Valid T, BasicType = T::type>
+			struct GetLabels {
+				using Type = TypeTuple<void>;
+			};
+			template<Valid T>
+			struct GetLabels<T, BasicType::Label> {
+				using Type = TypeTuple<T>;
+			};
+			template<Valid T>
+			struct GetLabels<T, BasicType::Conjunction> {
+				using Type = T::Labels;
+			};
+			template<Valid T>
+			struct GetLabels<T, BasicType::Expression> {
+				using Type = T::Uncovered;
+			};
+			template<typename _Left, typename _Result = TypeTuple<void>, bool = _Result::template find<_Left::Front>()>
+			struct Combine;
+			template<typename _Left, typename _Result>
+			struct Combine<_Left, _Result, true> {
+				using Type = Combine<typename _Left::Next, _Result>::Type;
+			};
+			template<typename _Left, typename _Result>
+			struct Combine<_Left, _Result, false> {
+				using Type = Combine<typename _Left::Next, typename Merge<_Result, typename _Left::Front>::Type>::Type;
+			};
+			template<typename Last, typename _Result>
+			struct Combine<TypeTuple<Last>, _Result, false> {
+				using Type = Merge<_Result, Last>::Type;
+			};
+			template<typename Last, typename _Result>
+			struct Combine<TypeTuple<Last>, _Result, true> {
+				using Type = _Result;
+			};
+			template<typename Some, typename _Result = TypeTuple<void>, bool = std::is_same_v<Some, TypeTuple<void>>>
+			struct CombineSome {
+				using Type = Combine<Some, _Result>::Type;
+			};
+			template<typename Some, typename _Result>
+			struct CombineSome<Some, _Result, true> {
+				using Type = _Result;
+			};
+			using Type = Rec<typename Left::Next, typename CombineSome<typename GetLabels<typename Left::Front>::Type, Result>::Type>::Type;
+		};
+		template<typename Result>
+		struct Rec<TypeTuple<void>, Result> {
+			using Type = Result;
+		};
+		using Type = Rec<>::Type;
+	};
 
-        template<Valid...Params>
-        using Prototype = True<Params...>;
-        using Call = T;
-        template<Valid Other>
-        using Apply = Base::template Apply<True, Other>;
-        template<Valid...Others>
-        using Calculate = Base::template Calculate<True, Others...>;
-    };
+	template<Label...labels>
+	struct Order {
+		static constexpr bool empty = false;
+		using Labels = TypeTuple<labels...>;
+		using Front = Labels::Front;
+		template<typename Next = typename Labels::Next, bool = std::is_same_v<Next, TypeTuple<void>>>
+		struct _Next;
+		template<Label...pack>
+		struct _Next<TypeTuple<pack...>, false>
+		{
+			using Type = Order<pack...>;
+		};
+		template<typename Next>
+		struct _Next<Next, true>
+		{
+			using Type = Order<>;
+		};
+		using Next = _Next<>::Type;
 
-    template<Valid...Args>
-    struct False : public Value<bool, false> {
-        using Base = LambdaCalculus<2, Args...>;
-        static constexpr int required = Base::required;
+		static std::string print() {
+			return ((std::string("¦Ë") + labels::print()) + ...);
+		}
+	};
+	template<>
+	struct Order<> {
+		static constexpr bool empty = true;
+		using Labels = TypeTuple<void>;
 
-        template<Valid...Params>
-        using Prototype = False<Params...>;
-        using Call = False;
-        template<Valid Other>
-        using Apply = Base::template Apply<False, Other>;
-        template<Valid...Others>
-        using Calculate = Base::template Calculate<False, Others...>;
-    };
+		static std::string print() {
+			return "";
+		}
+	};
 
-    template<Valid T, Valid F>
-    struct False<T, F> : public Value<bool, false> {
-        using Base = LambdaCalculus<2, T, F>;
-        static constexpr int required = Base::required;
+	template<typename Tuple>
+	struct ToOrder;
+	template<Label...pack>
+	struct ToOrder<TypeTuple<pack...>> {
+		using Type = Order<pack...>;
+	};
+	template<>
+	struct ToOrder<TypeTuple<void>> {
+		using Type = Order<>;
+	};
 
-        template<Valid...Params>
-        using Prototype = False<Params...>;
-        using Call = F;
-        template<Valid Other>
-        using Apply = Base::template Apply<False, Other>;
-        template<Valid...Others>
-        using Calculate = Base::template Calculate<False, Others...>;
-    };
+	template<Valid...Args>
+	struct Compose : public LambdaCalculusBase {
+		static constexpr BasicType type = BasicType::Conjunction;
+		using Labels = LabelInfoBuilder<Args...>::Type;
+		static constexpr int required = Labels::size;
+		using Params = TypeTuple<Args...>;
 
-    template<Valid...Args>
-    struct Identity : public LambdaCalculusBase {
-        using Base = LambdaCalculus<1, Args...>;
-        static constexpr int required = Base::required;
+		template<typename Params>
+		struct Simplify {
+			template<typename Tuple, int index = 1, typename Result = TypeTuple<void>, int = Tuple::size>
+			struct RemoveNone {
+				using Current = Tuple::template Type<index>;
+				static constexpr bool isNone = std::is_same_v<Current, None>;
 
-        template<Valid...Params>
-        using Prototype = Identity<Params...>;
-        using Call = Identity;
-        template<Valid Other>
-        using Apply = Base::template Apply<Identity, Other>;
-        template<Valid...Others>
-        using Calculate = Base::template Calculate<Identity, Others...>;
-    };
+				using Type = RemoveNone<Tuple, index + 1, typename __If<isNone, Result, typename Merge<Result, Current>::Type>::Type>::Type;
+			};
+			template<typename Tuple, int index, typename Result>
+			struct RemoveNone<Tuple, index, Result, index> {
+				using Current = Tuple::template Type<Tuple::size>;
+				static constexpr bool isNone = std::is_same_v<Current, None>;
+				using Type = __If<isNone, Result, typename Merge<Result, Current>::Type>::Type;
+			};
+			template<int index>
+			struct RemoveNone<TypeTuple<void>, index, TypeTuple<void>> {
+				using Type = TypeTuple<void>;
+			};
 
-    template<Valid X>
-    struct Identity<X> : public LambdaCalculusBase {
-        using Base = LambdaCalculus<1, X>;
-        static constexpr int required = Base::required;
+			template<typename Tuple, bool = std::is_same_v<Tuple, TypeTuple<void>>>
+			struct RemoveFirstCompose {
+				template<typename Front = typename Tuple::Front, typename Next = typename Tuple::Next, bool = Front::type == BasicType::Conjunction>
+				struct _RemoveFirstCompose {
+					using Type = Tuple;
+				};
+				template<typename Front, typename Next>
+				struct _RemoveFirstCompose<Front, Next, true> {
+					using Type = Merge<typename Front::template Prototype<>::Params, Next>::Type;
+				};
+				using Type = _RemoveFirstCompose<>::Type;
+			};
+			template<typename Tuple>
+			struct RemoveFirstCompose<Tuple, true> {
+				using Type = Tuple;
+			};
 
-        template<Valid...Params>
-        using Prototype = Identity<Params...>;
-        using Call = X;
-        template<Valid Other>
-        using Apply = Base::template Apply<Identity, Other>;
-        template<Valid...Others>
-        using Calculate = Base::template Calculate<Identity, Others...>;
-    };
+			template<typename Tuple, bool = (Tuple::size > 1)>
+			struct TryEvaluation {
+				template<typename Front = typename Tuple::Front, typename Arg = typename Tuple::Next::Front, typename Left = typename Tuple::Next::Next, bool = Front::type == BasicType::Label>
+				struct Process {
+					using Type = Merge<typename Front::template Apply<Arg>, Left>::Type;
+				};
+				template<typename Front, typename Arg, typename Left>
+				struct Process<Front, Arg, Left, true> {
+					using Type = Tuple;
+				};
+				using AfterProcess = Process<>::Type;
 
-    template<Valid Expression, int n>
-    struct _Let {
-        template<typename Args = TypeTuple<void>, bool = Args::size == n>
-        struct Type;
-        template<Valid...Args>
-        struct Type<TypeTuple<Args...>, false> : public LambdaCalculusBase {
-            using Base = LambdaCalculus<n, Args...>;
-            static constexpr int required = Base::required;
-            template<Valid...Params>
-            using Prototype = std::enable_if_t<(sizeof...(Params) <= n), Type<TypeTuple<Params...>>>;
-            using Call = Type;
-            template<Valid Other>
-            using Apply = Base::template Apply<Type, Other>;
-            template<Valid...Others>
-            using Calculate = Base::template Calculate<Prototype<>, Others...>;
-        };
-        template<Valid...Args>
-        struct Type<TypeTuple<Args...>, true> : public LambdaCalculusBase {
-            using Base = LambdaCalculus<n, Args...>;
-            static constexpr int required = Base::required;
-            template<Valid...Params>
-            using Prototype = std::enable_if_t<(sizeof...(Params) <= n), Type<TypeTuple<Params...>>>;
-            using Call = Expression::template Calculate<Args...>;
-            template<Valid Other>
-            using Apply = Call::template Apply<Other>;
-            template<Valid...Others>
-            using Calculate = Call::template Calculate<Others...>;
-        };
-        template<bool Boolean>
-        struct Type<TypeTuple<void>, Boolean> : public LambdaCalculusBase {
-            using Base = LambdaCalculus<n>;
-            static constexpr int required = Base::required;
-            template<Valid...Params>
-            using Prototype = std::enable_if_t<(sizeof...(Params) <= n), Type<TypeTuple<Params...>>>;
-            using Call = Type;
-            template<Valid Other>
-            using Apply = Base::template Apply<Type, Other>;
-            template<Valid...Others>
-            using Calculate = Base::template Calculate<Prototype<>, Others...>;
-        };
-    };
+				template<typename Last = void, typename Result = AfterProcess>
+				struct Rec {
+					using Type = Rec<Result, typename TryEvaluation<Result>::AfterProcess>::Type;
+				};
+				template<typename Result>
+				struct Rec<Result, Result> {
+					using Type = Result;
+				};
 
-    template<Valid Expression, int n = 0, Valid...Args>
-    using Let = std::enable_if_t<(n >= sizeof...(Args)), typename _Let<Expression, n>::template Type<TypeTuple<Args...>>>;
+				using Type = Rec<>::Type;
+			};
+			template<typename Tuple>
+			struct TryEvaluation<Tuple, false> {
+				using AfterProcess = Tuple;
+				using Type = Tuple;
+			};
+			using Type = TryEvaluation<typename RemoveFirstCompose<typename RemoveNone<Params>::Type>::Type>::Type;
+		};
 
-    struct IndexBase {};
+		template<typename _Args, bool = std::is_same_v<Params, _Args>>
+		struct Rebind {
+			using Type = Compose;
+		};
+		template<Valid...Params>
+		struct Rebind<TypeTuple<Params...>, false> {
+			using Type = Compose<Params...>;
+		};
+		template<typename Altered = typename Simplify<Params>::Type>
+		using Prototype = Rebind<Altered>::Type;
 
-    template<int m, int n = 1, typename = std::enable_if_t<(m > 0 && n > 0)>>
-    struct Index : public IndexBase {
-        constexpr static int Qty = n;
-        constexpr static int Loc[] = { m };
-        constexpr static int size = 1;
-    };
+		template<Label label, Valid Arg, typename Result = Params, int index = 1>
+		struct _Replace {
+			using Current = Result::template Type<index>;
+			using AfterReplace = Current::template Replace<label, Arg>;
+			using Type = _Replace<label, Arg, typename Alter<index, AfterReplace, Result>::Type, index + 1>::Type;
+		};
 
-    template<int...index>
-    struct Repeat : public IndexBase {
-        constexpr static int Qty = 1;
-        constexpr static int Loc[] = { index... };
-        constexpr static int size = sizeof...(index);
-    };
+		template<Label label, Valid Arg, typename Result>
+		struct _Replace<label, Arg, Result, Params::size + 1> {
+			using Type = Result;
+		};
 
-    template<>
-    struct Repeat<> : public IndexBase {
-        constexpr static int Qty = 1;
-        constexpr static int Loc[1] = { -1 };
-        constexpr static int size = 0;
-    };
+		using Call = Prototype<>;
+		template<Label label, Valid Arg>
+		using Replace = Prototype<typename _Replace<label, Arg>::Type>;
+		template<Label old, Label nov>
+		using Change = Replace<old, nov>;
+		template<Valid Arg>
+		using Apply = __If<std::is_same_v<Arg, None>, Compose, Prototype<typename Merge<Params, Arg>::Type>>::Type;
+		template<Valid..._Args>
+		using Calculate = LambdaCalculus::template Calculate<Prototype<>, _Args...>;
 
-    template<typename T>
-    concept ValidIndex = std::is_base_of_v<IndexBase, T>;
+		static std::string print() {
+			return ("(" + ... + (Args::print() + std::string(" "))) + std::string(")");
+		}
+	};
 
-    template<typename Order, ValidIndex Current = Index<1, 1>>
-    struct CurrentIndex {};
+	template<typename paramlist, Valid expression>
+	struct LabelInspector;
+	template<Label...labels, Valid expression>
+	struct LabelInspector<Order<labels...>, expression> {
+		using Params = TypeTuple<labels...>;
+		using Used = LabelInfoBuilder<expression>::Type;
+		template<typename Left = Used, typename Uncovered = TypeTuple<void>>
+		struct CurryInspector {
+			using Type = CurryInspector<typename Left::Next, typename __If<Params::template find<typename Left::Front>(), Uncovered, typename Merge<Uncovered, typename Left::Front>::Type>::Type>::Type;
+		};
+		template<typename Result>
+		struct CurryInspector<TypeTuple<void>, Result> {
+			using Type = Result;
+		};
+		using Uncovered = CurryInspector<>::Type;
+		static constexpr bool curried = std::is_same_v<Uncovered, TypeTuple<void>>;
+	};
 
-    template<ValidIndex...Order, ValidIndex Current>
-    struct CurrentIndex<TypeTuple<Order...>, Current> {
-        using Orders = TypeTuple<Order...>;
-        using Type = Orders::template Type<Current::Loc[0]>;
-        using Inc = CurrentIndex<Orders, typename __If<(Type::Qty > Current::Qty), Index<Current::Loc[0], Current::Qty + 1>, Index<Current::Loc[0] + 1>>::Type>;
-        constexpr static int size = Type::size;
-        template<int index = 0, typename = std::enable_if_t<(index < size)>>
-        constexpr static int Loc = Type::Loc[index];
-        constexpr static int sum = (Order::Qty + ...);
-    };
+	template<typename paramlist, Valid expression>
+	struct Expression;
+	template<Label...labels, Valid expression>
+	struct Expression<Order<labels...>, expression> : public LambdaCalculusBase {
+		static constexpr BasicType type = BasicType::Expression;
+		using Labels = Order<labels...>::Labels;
+		using LabelInfo = LabelInspector<Order<labels...>, expression>;
+		using Uncovered = LabelInfo::Uncovered;
+		static constexpr bool curried = !std::is_same_v<typename LabelInfo::Uncovered, TypeTuple<void>>;
+		using InnerExpression = expression;
 
-    template<ValidIndex...Order>
-    struct CurrentIndex<TypeTuple<Order...>, Index<sizeof...(Order), TypeTuple<Order...>::template Type<sizeof...(Order)>::Qty>> {
-        using Inc = CurrentIndex<TypeTuple<Order...>, IndexBase>;
-        using Type = TypeTuple<Order...>::template Type<sizeof...(Order)>;
-        constexpr static int size = Type::size;
-        template<int index = 0, typename = std::enable_if_t<(index < size)>>
-        constexpr static int Loc = Type::Loc[index];
-        constexpr static int sum = (Order::Qty + ...);
-    };
+		template<typename OuterOrder, Valid T>
+		struct Simplify {
+			template<typename Simplified = typename T::template Prototype<>, bool = Simplified::type == BasicType::Conjunction>
+			struct RemoveConjunction {
+				using Type = Simplified;
+			};
+			template<Valid Simplified>
+			struct RemoveConjunction<Simplified, true> {
+				template<typename Tuple = typename Simplified::Params, int Qty = Tuple::size>
+				struct GetInside {
+					using Type = Simplified;
+				};
+				template<typename Tuple>
+				struct GetInside<Tuple, 1> {
+					using Type = Tuple::Front;
+				};
+				template<typename Tuple>
+				struct GetInside<Tuple, 0> {
+					using Type = None;
+				};
+				using Type = GetInside<>::Type;
+			};
 
-    template <Valid Result, typename Left>
-    struct Reduce;
-    template <Valid Result, Valid Front, Valid...Left>
-    struct Reduce<Result, TypeTuple<Front, Left...>> {
-        using Type = Reduce<typename Result::template Apply<Front>, TypeTuple<Left...>>::Type;
-    };
-    template <Valid Result>
-    struct Reduce<Result, TypeTuple<void>> {
-        using Type = Result;
-    };
+			template<typename InnerExprssion>
+			struct GetLabels {
+				using Type = Merge<OuterOrder, typename InnerExprssion::Labels>::Type;
+			};
 
-    template<Valid Front, Valid...Args>
-    struct Compose : public LambdaCalculusBase {
-        using Base = LambdaCalculus<0>;
-        static constexpr int required = 0;
-        using Params = TypeTuple<Front, Args...>;
+			template<Valid Simplified, BasicType = Simplified::type>
+			struct MergeExpression {
+				using Type = Simplified;
+				using Labels = OuterOrder;
+			};
+			template<Valid Simplified>
+			struct MergeExpression<Simplified, BasicType::Expression> {
+				using InnerOrder = Simplified::Labels;
+				template<typename Inner = InnerOrder, typename Result = Simplified>
+				struct LabelChangeInspector {
+					using Front = Inner::Front;
+					static constexpr bool conflict = OuterOrder::template find<Front>();
+					template<typename = Result, bool = conflict>
+					struct Process {
+						using Type = LabelChangeInspector<typename Inner::Next, Result>::Type;
+					};
+					template<typename Source>
+					struct Process<Source, true> {
+						using NewLabel = CreateNewLabel<OuterOrder, typename Source::Labels, typename Simplified::Uncovered>::Type;
+						using AfterProcess = Source::template SelfChange<Front, NewLabel>;
+						using Type = LabelChangeInspector<typename AfterProcess::Labels, AfterProcess>::Type;
+					};
+					using Type = Process<>::Type;
+				};
+				template<typename Result>
+				struct LabelChangeInspector<TypeTuple<void>, Result> {
+					using Type = Result;
+				};
+				using Result = LabelChangeInspector<>::Type;
+				using Type = Result::InnerExpression;
+				using Labels = GetLabels<Result>::Type;
+			};
 
-        template<Valid...Params>
-        using Prototype = Compose<Front, Args..., Params...>;
-        using Call = Reduce<Front, TypeTuple<Args...>>::Type;
-        template<Valid Other>
-        using Apply = Call::template Apply<Other>;
-        template<Valid...Others>
-        using Calculate = Base::template Calculate<Prototype<>, Others...>;
+			using Result = MergeExpression<typename RemoveConjunction<>::Type>;
+			using Type = Result::Type;
+			using Labels = Result::Labels;
+		};
 
-        template<typename Current, typename Args = TypeTuple<void>, int left = Current::sum - Args::size, typename Result = Params>
-        struct Ordered;
+		template<typename Altered, typename Labels>
+		struct _Prototype {
+			using Type = Expression<typename ToOrder<Labels>::Type, Altered>;
+		};
+		template<typename _>
+		struct _Prototype<void, _> {
+			using Result = Simplify<Labels, expression>;
+			using SimplifiedExpression = Result::Type;
+			using SimplifiedLabels = Result::Labels;
+			using Type = Expression<typename ToOrder<SimplifiedLabels>::Type, SimplifiedExpression>;
+		};
+		template<Valid Altered>
+		struct _Prototype<Altered, void> {
+			using Type = Expression<typename ToOrder<Labels>::Type, Altered>;
+		};
+		template<typename Altered = void, typename Labels = void>
+		using Prototype = _Prototype<Altered, Labels>::Type;
 
-        template<typename Current, Valid T, Valid...Args, int left, typename Result>
-        struct Ordered<Current, TypeTuple<T, Args...>, left, Result> {
-            template<int Loc, typename Result>
-            using Changed = Alter<Loc, typename Result::template Type<Loc>::template Apply<T>, Result>::Type;
+		template<Valid Arg, bool = Order<labels...>::empty>
+		struct _Apply {
+			template<Valid = Arg, BasicType type = Arg::type>
+			struct LabelDealer {
+				using Current = Labels::Front;
+				using Type = Prototype<typename expression::template Replace<Current, Arg>, typename Labels::Next>;
+			};
+			template<Label _>
+			struct LabelDealer<_, BasicType::Label> {
+				template<typename T = Prototype<>, bool = Labels::template find<Arg>()>
+				struct Process {
+					using NewLabel = CreateNewLabel<TypeTuple<Arg>, Labels, typename T::Uncovered>::Type;
+					using Type = typename T::template SelfChange<Arg, NewLabel>;
+				};
+				template<typename T>
+				struct Process<T, false> {
+					using Type = T;
+				};
+				using Changed = Process<>::Type;
+				using Current = Changed::Labels::Front;
+				using Type = Prototype<typename Changed::InnerExpression::template Replace<Current, Arg>, typename Changed::Labels::Next>;
+			};
+			//To Do
+			//struct LabelDealer<_, BasicType::Conjunction>
+			//struct LabelDealer<_, BasicType::Expression>
+			using Type = LabelDealer<>::Type;
+		};
+		template<Valid Arg>
+		struct _Apply<Arg, true> {
+			using Type = expression::template Apply<Arg>;
+		};
+		template<bool Boolean>
+		struct _Apply<None, Boolean> {
+			using Type = Expression;
+		};
 
-            template<int index = 0>
-            struct RecChange {
-                using Type = Changed<Current::template Loc<index>, typename RecChange<index + 1>::Type>;
-            };
-            template<>
-            struct RecChange<Current::size> {
-                using Type = Result;
-            };
-            using ParamsChanged = RecChange<>::Type;
-            using Type = Ordered<typename Current::Inc, TypeTuple<Args...>, left, ParamsChanged>::Type;
-        };
+		template<Label old, Valid nov, bool = Uncovered::template find<old>(), bool = Labels::template find<nov>()>
+		struct AssociatedChange {
+			using Type = Expression;
+		};
+		template<Label old, Valid nov>
+		struct AssociatedChange<old, nov, true, false> {
+			using Type = Prototype<typename expression::template Change<old, nov>>;
+		};
+		template<Label old, Valid nov>
+		struct AssociatedChange<old, nov, true, true> {
+			using NewLabel = CreateNewLabel<TypeTuple<nov>, Labels, Uncovered>::Type;
+			using LabelAfterProcess = Alter<Find<nov, Labels>::loc, NewLabel, Labels>::Type;
+			using AfterProcess = Prototype<typename expression::template Change<nov, NewLabel>, LabelAfterProcess>;
+			using Type = Prototype<typename expression::template Change<old, nov>>;
+		};
 
-        template<typename Current, Valid...Others, Valid...Args>
-        struct Ordered<Current, TypeTuple<Others...>, 0, TypeTuple<Args...>> {
-            using Type = Compose<Args...>::template Calculate<Others...>;
-        };
+		using Call = Prototype<>;
+		template<Label label, Valid Arg>
+		using Replace = __If<Uncovered::template find<label>(), Prototype<typename expression::template Replace<label, Arg>>, Expression>::Type;
+		template<Label old, Label nov, typename OrderAfterReplace = typename Alter<Find<old, Labels>::loc, nov, Labels>::Type>
+		using SelfChange = Prototype<typename expression::template Change<old, nov>, OrderAfterReplace>;
+		template<Label old, Valid nov>
+		using Change = AssociatedChange<old, nov>::Type;
+		template<Valid Arg>
+		using Apply = _Apply<Arg>::Type;
+		template<Valid...Args>
+		using Calculate = LambdaCalculus::template Calculate<Prototype<>, Args...>;
 
-        template<typename Current, Valid...Args>
-        struct Ordered<Current, TypeTuple<void>, 0, TypeTuple<Args...>> {
-            using Type = Compose<Args...>::Call;
-        };
+		static std::string print() {
+			return "(" + Order<labels...>::print() + "." + expression::print() + ")";
+		}
+	};
 
-        template<typename Current, int left, typename Result>
-        struct Ordered<Current, TypeTuple<void>, left, Result> : public LambdaCalculusBase {
-            using Type = Ordered;
-            using Base = LambdaCalculus<left>;
-            static constexpr int required = Base::required;
-
-            template<Valid...Params>
-            using Prototype = Ordered<Current, TypeTuple<Params...>, left - sizeof...(Params), Result>::Type;
-            using Call = Ordered;
-            template<Valid Other>
-            using Apply = Base::template Apply<Ordered, Other>;
-            template<Valid...Others>
-            using Calculate = Base::template Calculate<Ordered, Others...>;
-        };
-
-        template<ValidIndex...Order>
-        using SetOrder = std::enable_if_t<(sizeof...(Order) > 0), typename Ordered<CurrentIndex<TypeTuple<Order...>>>::Type>;
-    };
-
-    template<int n, typename = std::enable_if_t<(n > 0)>>
-    struct ComposeN : public LambdaCalculusBase {
-        using Base = LambdaCalculus<n>;
-        static constexpr int required = Base::required;
-        template<typename Args = TypeTuple<void>, bool = Args::size == required>
-        struct Type;
-        template<Valid...Args>
-        struct Type<TypeTuple<Args...>, false> : public LambdaCalculusBase {
-            static constexpr int required = n - sizeof...(Args);
-            template<Valid...Params>
-            using Prototype = Type<TypeTuple<Args..., Params...>>;
-            using Call = Type;
-            template<Valid Other>
-            using Apply = Base::template Apply<Type, Other>;
-            template<Valid...Others>
-            using Calculate = Base::template Calculate<Prototype<>, Others...>;
-        };
-        template<Valid...Args>
-        struct Type<TypeTuple<Args...>, true> : public LambdaCalculusBase {
-            static constexpr int required = n - sizeof...(Args);
-            template<Valid...Params>
-            using Prototype = Type<TypeTuple<Args..., Params...>>;
-            using Call = Compose<Args...>::Call;
-            template<Valid Other>
-            using Apply = Call::template Apply<Other>;
-            template<Valid...Others>
-            using Calculate = Base::template Calculate<Prototype<>, Others...>;
-        };
-        template<bool Boolean>
-        struct Type<TypeTuple<void>, Boolean> : public LambdaCalculusBase {
-            static constexpr int required = n;
-            template<Valid...Params>
-            using Prototype = Type<TypeTuple<Params...>>;
-            using Call = Type;
-            template<Valid Other>
-            using Apply = Base::template Apply<Type, Other>;
-            template<Valid...Others>
-            using Calculate = Base::template Calculate<Prototype<>, Others...>;
-        };
-
-        template<Valid...Params>
-        using Prototype = Type<TypeTuple<Params...>>;
-        using Call = Prototype<>::Call;
-        template<Valid Other>
-        using Apply = Prototype<>::template Apply<Other>;
-        template<Valid...Others>
-        using Calculate = Prototype<>::template Calculate<Others...>;
-    };
-
-    template<Valid T, Valid...Args>
-    struct Flow : public LambdaCalculusBase {
-        using Base = LambdaCalculus<0>;
-        static constexpr int required = 0;
-        using Params = Reverse<T, Args...>::Type;
-
-        template<typename Args>
-        struct RecursiveApply;
-        template<Valid...Args>
-        struct RecursiveApply<TypeTuple<Args...>> {
-            using Type = Compose<Args...>;
-        };
-
-        template<Valid...Params>
-        using Prototype = Flow<T, Args..., Params...>;
-        using Call = RecursiveApply<Params>::Type::Call;
-        template<Valid Other>
-        using Apply = RecursiveApply<Params>::Type::template Apply<Other>;
-        template<Valid...Others>
-        using Calculate = Base::template Calculate<Prototype<>, Others...>;
-    };
-
-    template<auto = 'x'>
-    using L = ComposeN<1>;
-
-    template<Valid...Args>
-    using AND = Let<Compose<L<'a'>, L<'b'>, False<>>::SetOrder<Index<1>, Index<2>>, 2, Args...>;
-
-    template<Valid...Args>
-    using OR = Let<Compose<L<'a'>, True<>, L<'b'>>::SetOrder<Index<1>, Index<3>>, 2, Args...>;
-
-    template<Valid...Args>
-    using NOT = Let<Compose<L<'x'>, False<>, True<>>::SetOrder<Index<1>>, 1, Args...>;
-
-    template<int n, int loc, int index = 1, int...pack>
-    struct RepeatN {
-        using Type = RepeatN<n, loc, index + 1, pack..., loc>::Type;
-    };
-    template<int n, int loc, int...pack>
-    struct RepeatN<n, loc, n, pack...> {
-        using Type = Repeat<pack..., loc>;
-    };
-
-    template<Valid...Args>
-    using Inc = Let<Compose<L<'f'>, Compose<L<'n'>, L<'f'>, L<'x'>>::SetOrder<Index<1>, Index<2>, Index<3>>>::SetOrder<Index<2>, Repeat<1, 2>, Index<2>>, 1, Args...>;
-
-    template<unsigned n>
-    struct _N : public Value<unsigned, n> {
-        using Type = Inc<_N<n - 1>>;
-    };
-    template<>
-    struct _N<0> : public Value<unsigned, 0> {
-        using Type = Compose<None, L<'x'>>::SetOrder<Repeat<>, Index<2>>;
-    };
-
-    template<unsigned n>
-    using N = _N<n>::Type;
+	using True = Expression<Order<L<'a'>, L<'b'>>, L<'a'>>;
+	using False = Expression<Order<L<'a'>, L<'b'>>, L<'b'>>;
+	using If = Expression<Order<L<'p'>, L<'a'>, L<'b'>>, Compose<L<'p'>, L<'a'>, L<'b'>>>;
+	using Identity = Expression<Order<L<'x'>>, L<'x'>>;
 }
 
 #endif

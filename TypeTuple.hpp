@@ -31,7 +31,12 @@ inline namespace _TypeTuple {
             using Type = Next::template Type<index - 1>;
         };
         template<int index, typename = std::enable_if_t<(index <= size) && (index > 0)>>
-            using Type = AUX<index>::Type;
+        using Type = AUX<index>::Type;
+
+        template<typename T>
+        inline static constexpr bool find() {
+            return std::is_same_v<Current, T> ? true : Next::template find<T>();
+        }
     };
 
     template<typename Current>
@@ -41,12 +46,22 @@ inline namespace _TypeTuple {
         using Front = Current;
 
         template<int index, typename = std::enable_if_t<index == 1>>
-            using Type = Current;
+        using Type = Current;
+
+        template<typename T>
+        inline static constexpr bool find() {
+            return std::is_same_v<Current, T>;
+        }
     };
 
     template<>
     struct TypeTuple<void> {
         static constexpr int size = 0;
+
+        template<typename T>
+        inline static constexpr bool find() {
+            return false;
+        }
     };
 
     template<typename U, typename V>
@@ -133,5 +148,29 @@ inline namespace _TypeTuple {
     template<>
     struct Reverse<void> {
         using Type = TypeTuple<void>;
+    };
+
+    template<typename T, typename Tuple, typename = std::enable_if_t<!std::is_same_v<T, void>>>
+    struct Find {
+        template<typename = Tuple, bool found = Tuple::template find<T>()>
+        struct _Find {
+            static constexpr bool value = found;
+            static constexpr int loc = 0;
+        };
+        template<typename _Tuple>
+        struct _Find<_Tuple, true> {
+            template<typename Left = Tuple, bool = std::is_same_v<T, typename Left::Front>>
+            struct __Find {
+                static constexpr int loc = 1;
+            };
+            template<typename Front, typename...Left>
+            struct __Find<TypeTuple<Front, Left...>, false> {
+                static constexpr int loc = __Find<TypeTuple<Left...>>::loc + 1;
+            };
+            static constexpr bool value = true;
+            static constexpr int loc = __Find<>::loc;
+        };
+        static constexpr bool value = Tuple::template find<T>();
+        static constexpr int loc = _Find<>::loc;
     };
 };
