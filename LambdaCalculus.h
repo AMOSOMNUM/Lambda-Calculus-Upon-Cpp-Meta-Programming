@@ -79,20 +79,20 @@ namespace Lambda {
 		using Calculate = _Calculate<T, Others...>::Type;
 	};
 	/*
-	template<typename Type, Type v>
-	struct Value : public LambdaCalculusBase {
-		static constexpr Type value = v;
-	};
+		template<typename Type, Type v>
+		struct Value : public LambdaCalculusBase {
+			static constexpr Type value = v;
+		};
 
-	template<typename Expression, Valid Result = None>
-	struct Reduce {
-		using Type = Reduce<typename Expression::Next, typename Result::template Apply<typename Expression::Front>>::Type;
-	};
-	template<Valid Result>
-	struct Reduce<TypeTuple<void>, Result> {
-		using Type = Result;
-	};
-	*/
+		template<typename Expression, Valid Result = None>
+		struct Reduce {
+			using Type = Reduce<typename Expression::Next, typename Result::template Apply<typename Expression::Front>>::Type;
+		};
+		template<Valid Result>
+		struct Reduce<TypeTuple<void>, Result> {
+			using Type = Result;
+		};
+		*/
 	constexpr char LABEL_DEFAULT_CHARSET[] = {
 		't', 'x', 'y', 'z', 'a', 'b', 'c', 'd', 'm', 'p', 'q', 'r', 'k', 'u', 'v', 'w', 'f', 'g', 'h', 'o', 'n'
 	};
@@ -116,8 +116,8 @@ namespace Lambda {
 		template<Valid...Args>
 		using Calculate = LambdaCalculus::template Calculate<Prototype<>, Args...>;
 
-		static char print() {
-			return label;
+		static std::string print() {
+			return std::string() + label;
 		}
 	};
 
@@ -158,7 +158,7 @@ namespace Lambda {
 			struct GetLabels<T, BasicType::Expression> {
 				using Type = T::Uncovered;
 			};
-			template<typename _Left, typename _Result = TypeTuple<void>, bool = _Result::template find<_Left::Front>()>
+			template<typename _Left, typename _Result = TypeTuple<void>, bool = _Result::template find<typename _Left::Front>()>
 			struct Combine;
 			template<typename _Left, typename _Result>
 			struct Combine<_Left, _Result, true> {
@@ -331,7 +331,7 @@ namespace Lambda {
 				using Type = Process<>::Type;
 			};
 			template<Valid T>
-			struct RemoveBracket<T, BasicType::Expression> {				
+			struct RemoveBracket<T, BasicType::Expression> {
 				using Type = __If<T::Labels::size == 0, typename T::InnerExpression, T>::Type;
 			};
 
@@ -387,7 +387,8 @@ namespace Lambda {
 		using Calculate = LambdaCalculus::template Calculate<Call, _Args...>;
 
 		static std::string print() {
-			return ("(" + ... + (Args::print() + std::string(" "))) + std::string(")");
+			const auto& str = ('(' + ... + (Args::print() + ' '));
+			return str.substr(0, str.length() == 1 ? 1 : str.length() - 1) + ')';
 		}
 	};
 
@@ -607,40 +608,42 @@ namespace Lambda {
 		}
 	};
 
-	template<Valid ...Args>
-	struct _Flow {
-		using Type = Compose<>::Prototype<typename Reverse<Args...>::Type>;
-	};
-	template<Valid ...Args>
-	using Flow = _Flow<Args...>::Type;
-
-	template <unsigned n, Valid T, Valid...Args>
+	template<unsigned n, Valid F, Valid X>
 	struct __N {
 		template<int index = 1, bool = index == n>
 		struct Rec {
-			using Type = Compose<T, typename Rec<index + 1>::Type>;
+			using Type = Compose<F, typename Rec<index + 1>::Type>;
 		};
 		template<int index>
 		struct Rec<index, true> {
-			using Type = Compose<T, Args...>;
+			using Type = Compose<F, X>;
 		};
 		using Type = Rec<>::Type;
 	};
-	template <Valid T, Valid...Args>
-	struct __N<0, T, Args...> {
-		using Type = Compose<Args...>;
+	template<Valid F, Valid X>
+	struct __N<0, F, X> {
+		using Type = Compose<X>;
 	};
 
-	template <unsigned n, Valid T, Valid...Args>
-	using _N = __N<n, T, Args...>::Type;
+	template<unsigned n, Valid F, Valid X>
+	using _N = __N<n, F, X>::Type;
 
 	using True = Expression<Order<L<'a'>, L<'b'>>, L<'a'>>;
 	using False = Expression<Order<L<'a'>, L<'b'>>, L<'b'>>;
 	using If = Expression<Order<L<'p'>, L<'a'>, L<'b'>>, Compose<L<'p'>, L<'a'>, L<'b'>>>;
 	using Identity = Expression<Order<L<'x'>>, L<'x'>>;
+	using S = Expression<Order<L<'f'>, L<'g'>, L<'x'>>, Compose<L<'f'>, L<'x'>, Compose<L<'g'>, L<'x'>>>>;
+	using K = Expression<Order<L<'x'>, L<'y'>>, L<'x'>>;
+	using I = Identity;
 	template<unsigned n>
 	using N = Expression<Order<L<'f'>, L<'x'>>, _N<n, L<'f'>, L<'x'>>>::Call;
 	using Succ = Expression<Order<L<'n'>, L<'f'>, L<'x'>>, Compose<L<'f'>, Compose<L<'n'>, L<'f'>, L<'x'>>>>;
+	using Cons = Expression<Order<L<'a'>, L<'b'>, L<'p'>>, Compose<L<'p'>, L<'a'>, L<'b'>>>;
+	using Car = Expression<Order<L<'x'>>, Compose<L<'x'>, True>>;
+	using Cdr = Expression<Order<L<'x'>>, Compose<L<'x'>, False>>;
+	using Pred_ZeroCons = Compose<Cons, N<0>, N<0>>;
+	using Pred_SuccCons = Expression<Order<L<'x'>>, Compose<Cons, Compose<Succ, Compose<Car, L<'x'>>>, Compose<Car, L<'x'>>>>;
+	using Pred = Expression<Order<L<'n'>>, Compose<L<'n'>, Cdr, Compose<L<'n'>, Pred_SuccCons, Pred_ZeroCons>>>;
 }
 
 #endif
