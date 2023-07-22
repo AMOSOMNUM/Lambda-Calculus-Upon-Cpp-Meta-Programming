@@ -213,7 +213,7 @@ namespace Lambda {
 		using Next = _Next<>::Type;
 
 		static std::string print() {
-			return ((std::string("¦Ë") + labels::print()) + ...);
+			return ((std::string("Î»") + labels::print()) + ...);
 		}
 	};
 	template<>
@@ -282,7 +282,7 @@ namespace Lambda {
 			};
 
 			template<typename Tuple, bool = (Tuple::size > 1)>
-				struct TryEvaluation {
+			struct TryEvaluation {
 				template<typename Front = typename Tuple::Front, typename Arg = typename Tuple::Next::Front, typename Left = typename Tuple::Next::Next, bool = Front::type == BasicType::Label>
 				struct Process {
 					using Type = Merge<typename Front::template Apply<Arg>, Left>::Type;
@@ -493,7 +493,7 @@ namespace Lambda {
 		};
 		template<typename _>
 		struct _Prototype<void, _> {
-			using Result = Simplify<Labels, expression>;
+			using Result = Simplify<Labels, InnerExpression>;
 			using SimplifiedExpression = Result::Type;
 			using SimplifiedLabels = Result::Labels;
 			using Type = Expression<typename ToOrder<SimplifiedLabels>::Type, SimplifiedExpression>;
@@ -510,7 +510,7 @@ namespace Lambda {
 			template<Valid = Arg, BasicType type = Arg::type>
 			struct LabelDealer {
 				using Current = Labels::Front;
-				using Type = Prototype<typename expression::template Replace<Current, Arg>, typename Labels::Next>;
+				using Type = Prototype<typename InnerExpression::template Replace<Current, Arg>, typename Labels::Next>;
 			};
 			template<Label _>
 			struct LabelDealer<_, BasicType::Label> {
@@ -568,7 +568,7 @@ namespace Lambda {
 		};
 		template<Valid Arg>
 		struct _Apply<Arg, true> {
-			using Type = expression::template Apply<Arg>;
+			using Type = InnerExpression::template Apply<Arg>;
 		};
 		template<bool Boolean>
 		struct _Apply<None, Boolean> {
@@ -581,21 +581,30 @@ namespace Lambda {
 		};
 		template<Label old, Valid nov>
 		struct AssociatedChange<old, nov, true, false> {
-			using Type = Prototype<typename expression::template Change<old, nov>>;
+			using Type = Prototype<typename InnerExpression::template Change<old, nov>>;
 		};
 		template<Label old, Valid nov>
 		struct AssociatedChange<old, nov, true, true> {
 			using NewLabel = CreateNewLabel<TypeTuple<nov>, Labels, Uncovered>::Type;
 			using LabelAfterProcess = Alter<Find<nov, Labels>::loc, NewLabel, Labels>::Type;
-			using AfterProcess = Prototype<typename expression::template Change<nov, NewLabel>, LabelAfterProcess>;
-			using Type = Prototype<typename expression::template Change<old, nov>>;
+			using AfterProcess = Prototype<typename InnerExpression::template Change<nov, NewLabel>, LabelAfterProcess>;
+			using Type = Prototype<typename InnerExpression::template Change<old, nov>>;
+		};
+
+		template<Label label, Valid Arg, bool = Uncovered::template find<label>()>
+		struct _Replace {
+			using Type = Expression;
+		};
+		template<Label label, Valid Arg>
+		struct _Replace<label, Arg, true> {
+			using Type = Prototype<typename InnerExpression::template Replace<label, Arg>>;
 		};
 
 		using Call = Prototype<>;
 		template<Label label, Valid Arg>
-		using Replace = __If<Uncovered::template find<label>(), Prototype<typename expression::template Replace<label, Arg>>, Expression>::Type;
+		using Replace = _Replace<label, Arg>::Type;
 		template<Label old, Label nov, typename OrderAfterReplace = typename Alter<Find<old, Labels>::loc, nov, Labels>::Type>
-		using SelfChange = Prototype<typename expression::template Change<old, nov>, OrderAfterReplace>;
+		using SelfChange = Prototype<typename InnerExpression::template Change<old, nov>, OrderAfterReplace>;
 		template<Label old, Valid nov>
 		using Change = AssociatedChange<old, nov>::Type;
 		template<Valid Arg>
@@ -604,7 +613,7 @@ namespace Lambda {
 		using Calculate = LambdaCalculus::template Calculate<Prototype<>, Args...>;
 
 		static std::string print() {
-			return "(" + Order<labels...>::print() + "." + expression::print() + ")";
+			return "(" + Order<labels...>::print() + "." + InnerExpression::print() + ")";
 		}
 	};
 
@@ -643,7 +652,7 @@ namespace Lambda {
 	using Cdr = Expression<Order<L<'x'>>, Compose<L<'x'>, False>>;
 	using Pred_ZeroCons = Compose<Cons, N<0>, N<0>>;
 	using Pred_SuccCons = Expression<Order<L<'x'>>, Compose<Cons, Compose<Succ, Compose<Car, L<'x'>>>, Compose<Car, L<'x'>>>>;
-	using Pred = Expression<Order<L<'n'>>, Compose<L<'n'>, Cdr, Compose<L<'n'>, Pred_SuccCons, Pred_ZeroCons>>>;
+	using Pred = Expression<Order<L<'n'>>, Compose<Cdr, Compose<L<'n'>, Pred_SuccCons, Pred_ZeroCons>>>;
 }
 
 #endif
