@@ -505,8 +505,22 @@ namespace Lambda {
 		template<typename Altered = void, typename Labels = void>
 		using Prototype = _Prototype<Altered, Labels>::Type;
 
+		template<Label old, Label nov, typename OrderAfterReplace = typename Alter<Find<old, Labels>::loc, nov, Labels>::Type>
+		using SelfChange = Prototype<typename InnerExpression::template Change<old, nov>, OrderAfterReplace>;
+
 		template<Valid Arg, bool = Order<labels...>::empty>
 		struct _Apply {
+			template<typename Left, typename Labels, typename Last = TypeTuple<void>>
+			struct IsConflict {
+				static constexpr bool found = Labels::template find<typename Left::Front>();
+				using Result = __If<found, typename Merge<Last, typename Left::Front>::Type, Last>::Type;
+				using Type = IsConflict<typename Left::Next, Labels, Result>::Type;
+			};
+			template<typename Labels, typename Result>
+			struct IsConflict<TypeTuple<void>, Labels, Result> {
+				using Type = Result;
+			};
+
 			template<Valid = Arg, BasicType type = Arg::type>
 			struct LabelDealer {
 				using Current = Labels::Front;
@@ -514,10 +528,10 @@ namespace Lambda {
 			};
 			template<Label _>
 			struct LabelDealer<_, BasicType::Label> {
-				template<typename T = Prototype<>, bool = T::Labels::template find<Arg>()>
+				template<typename = Expression, bool = Labels::template find<Arg>()>
 				struct Process {
-					using NewLabel = CreateNewLabel<TypeTuple<Arg>, typename T::Labels, typename T::Uncovered>::Type;
-					using Type = typename T::template SelfChange<Arg, NewLabel>;
+					using NewLabel = CreateNewLabel<TypeTuple<Arg>, Labels, Uncovered>::Type;
+					using Type = SelfChange<Arg, NewLabel>;
 				};
 				template<typename T>
 				struct Process<T, false> {
@@ -529,24 +543,39 @@ namespace Lambda {
 			};
 			template<Valid _>
 			struct LabelDealer<_, BasicType::Expression> {
-				template<typename Left, typename Labels, typename Last = TypeTuple<void>>
-				struct IsConflict {
-					static constexpr bool found = Labels::template find<typename Left::Front>();
-					using Result = __If<found, typename Merge<Last, typename Left::Front>::Type, Last>::Type;
-					using Type = IsConflict<typename Left::Next, Labels, Result>::Type;
-				};
-				template<typename Labels, typename Result>
-				struct IsConflict<TypeTuple<void>, Labels, Result> {
-					using Type = Result;
-				};
-
-				template<typename T = Expression, bool = Arg::curried && !std::is_same_v<typename IsConflict<Labels, typename Arg::Uncovered>::Type, TypeTuple<void>>>
+				template<typename = Expression, bool = Arg::curried && !std::is_same_v<typename IsConflict<Labels, typename Arg::Uncovered>::Type, TypeTuple<void>>>
 				struct Process {
 					using Conflict = IsConflict<Labels, typename Arg::Uncovered>::Type;
-					template<typename Left = Conflict, typename Last = T>
+					template<typename Left = Conflict, typename Last = Expression>
 					struct RecChange {
 						using NewLabel = CreateNewLabel<typename Arg::Uncovered, typename Last::Labels, typename Last::Uncovered>::Type;
-						using Result = typename T::template SelfChange<typename Left::Front, NewLabel>;
+						using Result = typename Last::template SelfChange<typename Left::Front, NewLabel>;
+						using Type = RecChange<typename Left::Next, Result>::Type;
+					};
+					template<typename Result>
+					struct RecChange<TypeTuple<void>, Result> {
+						using Type = Result;
+					};
+					using Type = RecChange<>::Type;
+				};
+				template<typename T>
+				struct Process<T, false> {
+					using Type = T;
+				};
+
+				using Changed = Process<>::Type;
+				using Current = Changed::Labels::Front;
+				using Type = Prototype<typename Changed::InnerExpression::template Replace<Current, Arg>, typename Changed::Labels::Next>;
+			};
+			template<Valid _>
+			struct LabelDealer<_, BasicType::Conjunction> {				
+				template<typename = Expression, bool = !std::is_same_v<typename IsConflict<Labels, typename Arg::Labels>::Type, TypeTuple<void>>>
+				struct Process {
+					using Conflict = IsConflict<Labels, typename Arg::Labels>::Type;
+					template<typename Left = Conflict, typename Last = Expression>
+					struct RecChange {
+						using NewLabel = CreateNewLabel<typename Arg::Labels, typename Last::Labels, typename Last::Uncovered>::Type;
+						using Result = typename Last::template SelfChange<typename Left::Front, NewLabel>;
 						using Type = RecChange<typename Left::Next, Result>::Type;
 					};
 					template<typename Result>
@@ -603,8 +632,6 @@ namespace Lambda {
 		using Call = Prototype<>;
 		template<Label label, Valid Arg>
 		using Replace = _Replace<label, Arg>::Type;
-		template<Label old, Label nov, typename OrderAfterReplace = typename Alter<Find<old, Labels>::loc, nov, Labels>::Type>
-		using SelfChange = Prototype<typename InnerExpression::template Change<old, nov>, OrderAfterReplace>;
 		template<Label old, Valid nov>
 		using Change = AssociatedChange<old, nov>::Type;
 		template<Valid Arg>
