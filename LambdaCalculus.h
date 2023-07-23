@@ -540,12 +540,12 @@ namespace Lambda {
 					using Type = Result;
 				};
 
-				template<typename T = Prototype<>, bool = Arg::curried && !std::is_same_v<typename IsConflict<typename T::Labels, typename Arg::Uncovered>::Type, TypeTuple<void>>>
+				template<typename T = Expression, bool = Arg::curried && !std::is_same_v<typename IsConflict<Labels, typename Arg::Uncovered>::Type, TypeTuple<void>>>
 				struct Process {
-					using Conflict = IsConflict<typename T::Labels, typename Arg::Uncovered>::Type;
+					using Conflict = IsConflict<Labels, typename Arg::Uncovered>::Type;
 					template<typename Left = Conflict, typename Last = T>
 					struct RecChange {
-						using NewLabel = CreateNewLabel<typename Arg::Uncovered, typename T::Labels, typename T::Uncovered>::Type;
+						using NewLabel = CreateNewLabel<typename Arg::Uncovered, typename Last::Labels, typename Last::Uncovered>::Type;
 						using Result = typename T::template SelfChange<typename Left::Front, NewLabel>;
 						using Type = RecChange<typename Left::Next, Result>::Type;
 					};
@@ -644,15 +644,30 @@ namespace Lambda {
 	using S = Expression<Order<L<'f'>, L<'g'>, L<'x'>>, Compose<L<'f'>, L<'x'>, Compose<L<'g'>, L<'x'>>>>;
 	using K = Expression<Order<L<'x'>, L<'y'>>, L<'x'>>;
 	using I = Identity;
+	using B = Expression<Order<L<'g'>, L<'h'>, L<'x'>>, Compose<L<'g'>, Compose<L<'h'>, L<'x'>>>>;
+	using C = Expression<Order<L<'x'>, L<'y'>, L<'z'>>, Compose<L<'x'>, L<'z'>, L<'y'>>>;
+	using W = Expression<Order<L<'x'>, L<'y'>>, Compose<L<'x'>, L<'y'>, L<'y'>>>;
+	using U = Expression<Order<L<'x'>, L<'y'>>, Compose<L<'x'>, L<'x'>, L<'y'>>>;
 	template<unsigned n>
 	using N = Expression<Order<L<'f'>, L<'x'>>, _N<n, L<'f'>, L<'x'>>>::Call;
 	using Succ = Expression<Order<L<'n'>, L<'f'>, L<'x'>>, Compose<L<'f'>, Compose<L<'n'>, L<'f'>, L<'x'>>>>;
+	using Plus = Expression<Order<L<'a'>, L<'b'>, L<'f'>, L<'x'>>, Compose<L<'a'>, L<'f'>, Compose<L<'b'>, L<'f'>, L<'x'>>>>;
+	using Mult = Expression<Order<L<'a'>, L<'b'>, L<'f'>>, Compose<L<'a'>, Compose<L<'b'>, L<'f'>>>>;
+	using Pred = Expression<Order<L<'n'>, L<'f'>, L<'x'>>, Compose<L<'n'>, Expression<Order<L<'g'>, L<'h'>>, Compose<L<'h'>, Compose<L<'g'>, L<'f'>>>>, Expression<Order<L<'u'>>, L<'x'>>, Identity>>;
+	using IsZero = Expression<Order<L<'n'>>, Compose<L<'n'>, Expression<Order<L<'x'>>, False>, True>>;
 	using Cons = Expression<Order<L<'a'>, L<'b'>, L<'p'>>, Compose<L<'p'>, L<'a'>, L<'b'>>>;
 	using Car = Expression<Order<L<'x'>>, Compose<L<'x'>, True>>;
 	using Cdr = Expression<Order<L<'x'>>, Compose<L<'x'>, False>>;
-	using Pred_ZeroCons = Compose<Cons, N<0>, N<0>>;
-	using Pred_SuccCons = Expression<Order<L<'x'>>, Compose<Cons, Compose<Succ, Compose<Car, L<'x'>>>, Compose<Car, L<'x'>>>>;
-	using Pred = Expression<Order<L<'n'>>, Compose<Cdr, Compose<L<'n'>, Pred_SuccCons, Pred_ZeroCons>>>;
+	/**Alternative Pred
+	* using Pred_ZeroCons = Compose<Cons, N<0>, N<0>>;
+	* using Pred_SuccCons = Expression<Order<L<'x'>>, Compose<Cons, Compose<Succ, Compose<Car, L<'x'>>>, Compose<Car, L<'x'>>>>;
+	* using Pred = Expression<Order<L<'n'>>, Compose<Cdr, Compose<L<'n'>, Pred_SuccCons, Pred_ZeroCons>>>;
+	*/
+	//Y Combinator Unsupported for now
+	//using Y = Expression<Order<L<'f'>>, Compose<Expression<Order<L<'x'>>, Compose<L<'f'>, Compose<L<'x'>, L<'x'>>>>, Expression<Order<L<'x'>>, Compose<L<'f'>, Compose<L<'x'>, L<'x'>>>>>>;
+	using Fib_ZeroCons = Compose<Cons, N<0>, N<1>>;
+	using Fib_SuccCons = Expression<Order<L<'x'>>, Compose<Cons, Compose<Cdr, L<'x'>>, Compose<Plus, Compose<Car, L<'x'>>, Compose<Cdr, L<'x'>>>>>;
+	using Fib = Expression<Order<L<'n'>>, Compose<Cdr, Compose<L<'n'>, Fib_SuccCons, Fib_ZeroCons>>>;
 }
 
 #endif
