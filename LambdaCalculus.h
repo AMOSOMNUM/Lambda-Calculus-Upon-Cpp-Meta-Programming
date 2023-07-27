@@ -22,7 +22,6 @@ namespace Lambda {
 
 	struct None : public LambdaCalculusBase {
 		static constexpr BasicType type = BasicType::None;
-		static constexpr int required = 0;
 
 		using Call = None;
 		template<Valid Other>
@@ -100,21 +99,20 @@ namespace Lambda {
 	template<char label>
 	struct L : public LambdaCalculusBase {
 		static constexpr BasicType type = BasicType::Label;
-		static constexpr int required = 0;
 		using Labels = TypeTuple<L>;
 
 		template<char NewLabel = label>
 		using Prototype = L<NewLabel>;
 
-		using Call = Prototype<>;
+		using Call = L;
 		template<Label Other, Valid T>
-		using Replace = __If<std::is_same_v<Prototype<>, Other>, T, Prototype<>>::Type;
+		using Replace = __If<std::is_same_v<L, Other>, T, L>::Type;
 		template<Label old, Label nov>
 		using Change = Replace<old, nov>;
 		template<Valid Arg>
-		using Apply = __If<std::is_same_v<Arg, None>, Prototype<>, Arg>::Type;
+		using Apply = __If<std::is_same_v<Arg, None>, L, Arg>::Type;
 		template<Valid...Args>
-		using Calculate = LambdaCalculus::template Calculate<Prototype<>, Args...>;
+		using Calculate = LambdaCalculus::template Calculate<L, Args...>;
 
 		static std::string print() {
 			return std::string() + label;
@@ -237,11 +235,9 @@ namespace Lambda {
 		using Type = Order<>;
 	};
 
-	template<Valid...Args>
-	struct Compose : public LambdaCalculusBase {
-		static constexpr BasicType type = BasicType::Conjunction;
+	template<bool Unexpand, Valid...Args>
+	struct Conjunction {
 		using Labels = LabelInfoBuilder<Args...>::Type;
-		static constexpr int required = Labels::size;
 		using Params = TypeTuple<Args...>;
 
 		template<typename Params>
@@ -272,7 +268,7 @@ namespace Lambda {
 				};
 				template<typename Front, typename Next>
 				struct _RemoveFirstCompose<Front, Next, true> {
-					using Type = Merge<typename Front::template Prototype<>::Params, Next>::Type;
+					using Type = Merge<typename __If<Front::unexpand, typename Front::Call, typename Front::Call::Params>::Type, Next>::Type;
 				};
 				using Type = _RemoveFirstCompose<>::Type;
 			};
@@ -281,8 +277,8 @@ namespace Lambda {
 				using Type = Tuple;
 			};
 
-			template<typename Tuple, bool = (Tuple::size > 1)>
-			struct TryEvaluation {
+			template<typename Tuple, bool = (Tuple::size > 1) && !Unexpand>
+				struct TryEvaluation {
 				template<typename Front = typename Tuple::Front, typename Arg = typename Tuple::Next::Front, typename Left = typename Tuple::Next::Next, bool = Front::type == BasicType::Label>
 				struct Process {
 					using Type = Merge<typename Front::template Apply<Arg>, Left>::Type;
@@ -353,6 +349,32 @@ namespace Lambda {
 			using Type = SimplifyEach<typename TryEvaluation<typename RemoveFirstCompose<typename RemoveNone<Params>::Type>::Type>::Type>::Type;
 		};
 
+		template<Label label, Valid Arg, typename Result = Params, int index = 1>
+		struct Replace {
+			using Current = Result::template Type<index>;
+			using AfterReplace = Current::template Replace<label, Arg>;
+			using Type = Replace<label, Arg, typename Alter<index, AfterReplace, Result>::Type, index + 1>::Type;
+		};
+
+		template<Label label, Valid Arg, typename Result>
+		struct Replace<label, Arg, Result, Params::size + 1> {
+			using Type = Result;
+		};
+
+		static std::string print() {
+			const auto& str = ('(' + ... + (Args::print() + ' '));
+			return str.substr(0, str.length() == 1 ? 1 : str.length() - 1) + ')';
+		}
+	};
+
+	template<Valid...Args>
+	struct Compose : public LambdaCalculusBase {
+		static constexpr BasicType type = BasicType::Conjunction;
+		static constexpr bool unexpand = false;
+		using Base = Conjunction<false, Args...>;
+		using Labels = Base::Labels;
+		using Params = Base::Params;
+
 		template<typename _Args, bool = std::is_same_v<Params, _Args>>
 		struct Rebind {
 			using Type = Compose;
@@ -361,24 +383,12 @@ namespace Lambda {
 		struct Rebind<TypeTuple<Params...>, false> {
 			using Type = Compose<Params...>;
 		};
-		template<typename Altered = typename Simplify<Params>::Type>
+		template<typename Altered = typename Base::template Simplify<Params>::Type>
 		using Prototype = Rebind<Altered>::Type;
-
-		template<Label label, Valid Arg, typename Result = Params, int index = 1>
-		struct _Replace {
-			using Current = Result::template Type<index>;
-			using AfterReplace = Current::template Replace<label, Arg>;
-			using Type = _Replace<label, Arg, typename Alter<index, AfterReplace, Result>::Type, index + 1>::Type;
-		};
-
-		template<Label label, Valid Arg, typename Result>
-		struct _Replace<label, Arg, Result, Params::size + 1> {
-			using Type = Result;
-		};
 
 		using Call = Prototype<>;
 		template<Label label, Valid Arg>
-		using Replace = Prototype<typename _Replace<label, Arg>::Type>;
+		using Replace = Prototype<typename Base::template Replace<label, Arg>::Type>;
 		template<Label old, Label nov>
 		using Change = Replace<old, nov>;
 		template<Valid Arg>
@@ -387,8 +397,11 @@ namespace Lambda {
 		using Calculate = LambdaCalculus::template Calculate<Call, _Args...>;
 
 		static std::string print() {
-			const auto& str = ('(' + ... + (Args::print() + ' '));
-			return str.substr(0, str.length() == 1 ? 1 : str.length() - 1) + ')';
+			if constexpr (Params::size == 1)
+				return Params::Front::print();
+			else if constexpr (Params::size == 0)
+				return None::print();
+			return Base::print();
 		}
 	};
 
@@ -637,10 +650,13 @@ namespace Lambda {
 		template<Valid Arg>
 		using Apply = _Apply<Arg>::Type;
 		template<Valid...Args>
-		using Calculate = LambdaCalculus::template Calculate<Prototype<>, Args...>;
+		using Calculate = LambdaCalculus::template Calculate<Call, Args...>;
 
 		static std::string print() {
-			return "(" + Order<labels...>::print() + "." + InnerExpression::print() + ")";
+			auto inner = InnerExpression::print().substr();
+			if constexpr (InnerExpression::type == BasicType::Conjunction)
+				inner = inner.substr(1, inner.length() - 2);
+			return "(" + Order<labels...>::print() + "." + inner + ")";
 		}
 	};
 
@@ -671,6 +687,7 @@ namespace Lambda {
 	using S = Expression<Order<L<'f'>, L<'g'>, L<'x'>>, Compose<L<'f'>, L<'x'>, Compose<L<'g'>, L<'x'>>>>;
 	using K = Expression<Order<L<'x'>, L<'y'>>, L<'x'>>;
 	using I = Identity;
+	using Iota = Expression<Order<L<'f'>>, Compose<L<'f'>, S, K>>;
 	using B = Expression<Order<L<'g'>, L<'h'>, L<'x'>>, Compose<L<'g'>, Compose<L<'h'>, L<'x'>>>>;
 	using C = Expression<Order<L<'x'>, L<'y'>, L<'z'>>, Compose<L<'x'>, L<'z'>, L<'y'>>>;
 	using W = Expression<Order<L<'x'>, L<'y'>>, Compose<L<'x'>, L<'y'>, L<'y'>>>;
@@ -681,6 +698,7 @@ namespace Lambda {
 	using Plus = Expression<Order<L<'a'>, L<'b'>, L<'f'>, L<'x'>>, Compose<L<'a'>, L<'f'>, Compose<L<'b'>, L<'f'>, L<'x'>>>>;
 	using Mult = Expression<Order<L<'a'>, L<'b'>, L<'f'>>, Compose<L<'a'>, Compose<L<'b'>, L<'f'>>>>;
 	using Pred = Expression<Order<L<'n'>, L<'f'>, L<'x'>>, Compose<L<'n'>, Expression<Order<L<'g'>, L<'h'>>, Compose<L<'h'>, Compose<L<'g'>, L<'f'>>>>, Expression<Order<L<'u'>>, L<'x'>>, Identity>>;
+	using Sub = Expression<Order<L<'a'>, L<'b'>>, Compose<L<'b'>, Pred, L<'a'>>>;
 	using IsZero = Expression<Order<L<'n'>>, Compose<L<'n'>, Expression<Order<L<'x'>>, False>, True>>;
 	using Cons = Expression<Order<L<'a'>, L<'b'>, L<'p'>>, Compose<L<'p'>, L<'a'>, L<'b'>>>;
 	using Car = Expression<Order<L<'x'>>, Compose<L<'x'>, True>>;
@@ -690,11 +708,149 @@ namespace Lambda {
 	* using Pred_SuccCons = Expression<Order<L<'x'>>, Compose<Cons, Compose<Succ, Compose<Car, L<'x'>>>, Compose<Car, L<'x'>>>>;
 	* using Pred = Expression<Order<L<'n'>>, Compose<Cdr, Compose<L<'n'>, Pred_SuccCons, Pred_ZeroCons>>>;
 	*/
-	//Y Combinator Unsupported for now
-	//using Y = Expression<Order<L<'f'>>, Compose<Expression<Order<L<'x'>>, Compose<L<'f'>, Compose<L<'x'>, L<'x'>>>>, Expression<Order<L<'x'>>, Compose<L<'f'>, Compose<L<'x'>, L<'x'>>>>>>;
 	using Fib_ZeroCons = Compose<Cons, N<0>, N<1>>;
 	using Fib_SuccCons = Expression<Order<L<'x'>>, Compose<Cons, Compose<Cdr, L<'x'>>, Compose<Plus, Compose<Car, L<'x'>>, Compose<Cdr, L<'x'>>>>>;
 	using Fib = Expression<Order<L<'n'>>, Compose<Cdr, Compose<L<'n'>, Fib_SuccCons, Fib_ZeroCons>>>;
+
+	template<Valid...Args>
+	struct NonExpandCompose : public LambdaCalculusBase {
+		static constexpr BasicType type = BasicType::Conjunction;
+		static constexpr bool unexpand = true;
+		using Base = Conjunction<true, Args...>;
+		using Labels = Base::Labels;
+		using Params = Base::Params;
+
+		template<typename _Args, bool = std::is_same_v<Params, _Args>>
+		struct Rebind {
+			using Type = NonExpandCompose;
+		};
+		template<Valid...Params>
+		struct Rebind<TypeTuple<Params...>, false> {
+			using Type = NonExpandCompose<Params...>;
+		};
+		template<typename Altered = typename Base::template Simplify<Params>::Type>
+		using Prototype = Rebind<Altered>::Type;
+
+		using Call = Prototype<>;
+		template<Label label, Valid Arg>
+		using Replace = Prototype<typename Base::template Replace<label, Arg>::Type>;
+		template<Label old, Label nov>
+		using Change = Replace<old, nov>;
+		template<Valid Arg>
+		using Apply = __If<std::is_same_v<Arg, None>, NonExpandCompose, Prototype<typename Merge<Params, Arg>::Type>>::Type;
+		template<Valid..._Args>
+		using Calculate = LambdaCalculus::template Calculate<Call, _Args...>;
+
+		static std::string print() {
+			return Base::print();
+		}
+	};
+
+	//Y Combinator Unsupported for now
+	constexpr unsigned RecMax = 64;
+	template<Valid Fun = None>
+	struct _Y :public LambdaCalculusBase {
+		//f (f(x x) f(x x))
+		using InnerFunction = NonExpandCompose<Expression<Order<L<'x'>>, Compose<Fun, Compose<L<'x'>, L<'x'>>>>, Expression<Order<L<'x'>>, Compose<Fun, Compose<L<'x'>, L<'x'>>>>>;
+		//n f (f(x x) f(x x))
+		template<unsigned n>
+		using ExpressionN = _N<n, Fun, InnerFunction>;
+
+		static constexpr BasicType type = BasicType::Conjunction;
+		using Labels = TypeTuple<void>;
+
+		template<Valid X>
+		struct Type : public LambdaCalculusBase {
+			using InnerExpression = InnerFunction::template Apply<X>;
+			template<unsigned n>
+			using ExpressionN = _N<n, Fun, InnerFunction>;
+			static constexpr BasicType type = BasicType::Conjunction;
+			using Labels = ExpressionN<1>::Labels;
+
+			template<Valid Last = None, unsigned n = 1>
+			struct Rec {
+				using Result = ExpressionN<n>::Call;
+
+				template<Valid Result, bool = std::is_same_v<Result, Last>>
+				struct Compare {
+					using Type = Rec<Result, n + 1>::Type;
+				};
+				template<Valid Result>
+				struct Compare<Result, true> {
+					using Type = Result;
+				};
+				using Type = Compare<Result>::Type;
+			};
+			template<Valid Last>
+			struct Rec<Last, RecMax> {
+				using Type = Last;
+			};
+
+			using Call = Rec<>::Type;
+			template<Valid X>
+			using Apply = Call::template Apply<X>; 
+			template<Label label, Valid T>
+			using Replace = Type<typename X::template Replace<label, T>::Call>;
+			template<Label old, Label nov>
+			using Change = Replace<old, nov>;
+			template<Valid...Others>
+			using Calculate = LambdaCalculus::template Calculate<Call, Others...>;
+
+			std::string print() {
+				InnerFunction::print();
+			}
+		};
+
+		template<Valid T>
+		struct Simplify {
+			using Type = Type<typename T::Call>;
+		};
+		template<>
+		struct Simplify<None> {
+			using Type = _Y;
+		};
+
+		using Call = _Y;
+		template<Valid X>
+		using Apply = Simplify<X>::Type;
+		template<Label label, Valid T>
+		using Replace = Call;
+		template<Label old, Label nov>
+		using Change = Call;
+		template<Valid...Others>
+		using Calculate = LambdaCalculus::template Calculate<Call, Others...>;
+
+		static std::string print() {
+			return InnerFunction::print();
+		}
+	};
+	template<>
+	struct _Y<None> : public LambdaCalculusBase {
+		//f(x x) f(x x)
+		using InnerFunction = Expression<Order<L<'f'>>, Compose<Expression<Order<L<'x'>>, Compose<L<'f'>, NonExpandCompose<L<'x'>, L<'x'>>>>, Expression<Order<L<'x'>>, Compose<L<'f'>, Compose<L<'x'>, L<'x'>>>>>>;
+
+		static constexpr BasicType type = BasicType::Expression;
+		using Labels = InnerFunction::Labels;
+		using Uncovered = InnerFunction::Uncovered;
+		static constexpr bool curried = InnerFunction::curried;
+		using InnerExpression = InnerFunction::InnerExpression; 
+		
+		using Call = _Y;
+		template<Valid Fun>
+		using Apply = _Y<Fun>;
+		template<Label label, Valid T>
+		using Replace = Call;
+		template<Label old, Label nov>
+		using Change = Call;
+		template<Valid...Others>
+		using Calculate = LambdaCalculus::template Calculate<Call, Others...>;
+
+		static std::string print() {
+			return InnerFunction::print();
+		}
+	};
+
+	using Y = _Y<>;
 }
 
 #endif
