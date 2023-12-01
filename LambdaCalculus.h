@@ -4,7 +4,7 @@
 #include "TypeTuple.hpp"
 #include <string>
 
-namespace Lambda {
+inline namespace LambdaCalculus {
 	class LambdaCalculusBase {};
 
 	template<typename T>
@@ -78,42 +78,28 @@ namespace Lambda {
 		template<Valid T, Valid...Others>
 		using Calculate = _Calculate<T, Others...>::Type;
 	};
-	/*
-		template<typename Type, Type v>
-		struct Value : public LambdaCalculusBase {
-			static constexpr Type value = v;
-		};
 
-		template<typename Expression, Valid Result = None>
-		struct Reduce {
-			using Type = Reduce<typename Expression::Next, typename Result::template Apply<typename Expression::Front>>::Type;
-		};
-		template<Valid Result>
-		struct Reduce<TypeTuple<void>, Result> {
-			using Type = Result;
-		};
-	*/
 	constexpr char LABEL_DEFAULT_CHARSET[] = {
 		't', 'x', 'y', 'z', 'a', 'b', 'c', 'd', 'm', 'p', 'q', 'r', 'k', 'u', 'v', 'w', 'f', 'g', 'h', 'o', 'n'
 	};
 
 	template<char label>
-	struct L : public LambdaCalculusBase {
+	struct Symbol : public LambdaCalculusBase {
 		static constexpr BasicType type = BasicType::Label;
-		using Labels = TypeTuple<L>;
+		using Labels = TypeTuple<Symbol>;
 
 		template<char NewLabel = label>
-		using Prototype = L<NewLabel>;
+		using Prototype = Symbol<NewLabel>;
 
-		using Call = L;
+		using Call = Symbol;
 		template<Label Other, Valid T>
-		using Replace = __If<std::is_same_v<L, Other>, T, L>::Type;
+		using Replace = __If<std::is_same_v<Symbol, Other>, T, Symbol>::Type;
 		template<Label old, Label nov>
 		using Change = Replace<old, nov>;
 		template<Valid Arg>
-		using Apply = __If<std::is_same_v<Arg, None>, L, Arg>::Type;
+		using Apply = __If<std::is_same_v<Arg, None>, Symbol, Arg>::Type;
 		template<Valid...Args>
-		using Calculate = LambdaCalculus::template Calculate<L, Args...>;
+		using Calculate = LambdaCalculus::template Calculate<Symbol, Args...>;
 
 		static std::string print() {
 			return std::string() + label;
@@ -123,9 +109,9 @@ namespace Lambda {
 	template<Label label, typename Outer, typename Inner, typename Uncovered>
 	constexpr bool exists = Outer::template find<label>() | Inner::template find<label>() | Uncovered::template find<label>();
 
-	template<typename Outer, typename Inner, typename Uncovered, int index = 0, bool isExist = exists<L<LABEL_DEFAULT_CHARSET[index]>, Outer, Inner, Uncovered>>
+	template<typename Outer, typename Inner, typename Uncovered, int index = 0, bool isExist = exists<Symbol<LABEL_DEFAULT_CHARSET[index]>, Outer, Inner, Uncovered>>
 	struct CreateNewLabel {
-		using Type = L<LABEL_DEFAULT_CHARSET[index]>;
+		using Type = Symbol<LABEL_DEFAULT_CHARSET[index]>;
 	};
 	template<typename Outer, typename Inner, typename Uncovered, int index>
 	struct CreateNewLabel<Outer, Inner, Uncovered, index, true> {
@@ -133,7 +119,7 @@ namespace Lambda {
 	};
 	template<typename Outer, typename Inner, typename Uncovered>
 	struct CreateNewLabel<Outer, Inner, Uncovered, sizeof(LABEL_DEFAULT_CHARSET) / sizeof(char) - 1, true> {
-		using Type = L<'?'>;
+		using Type = Symbol<'?'>;
 	};
 
 	template<Valid...Args>
@@ -193,7 +179,7 @@ namespace Lambda {
 	};
 
 	template<Label...labels>
-	struct Order {
+	struct Param {
 		static constexpr bool empty = false;
 		using Labels = TypeTuple<labels...>;
 		using Front = Labels::Front;
@@ -202,12 +188,12 @@ namespace Lambda {
 		template<Label...pack>
 		struct _Next<TypeTuple<pack...>, false>
 		{
-			using Type = Order<pack...>;
+			using Type = Param<pack...>;
 		};
 		template<typename Next>
 		struct _Next<Next, true>
 		{
-			using Type = Order<>;
+			using Type = Param<>;
 		};
 		using Next = _Next<>::Type;
 
@@ -215,8 +201,9 @@ namespace Lambda {
 			return ((std::string("\u03bb") + labels::print()) + ...);
 		}
 	};
+
 	template<>
-	struct Order<> {
+	struct Param<> {
 		static constexpr bool empty = true;
 		using Labels = TypeTuple<void>;
 
@@ -226,78 +213,91 @@ namespace Lambda {
 	};
 
 	template<typename Tuple>
-	struct ToOrder;
+	struct ToParam;
+
 	template<Label...pack>
-	struct ToOrder<TypeTuple<pack...>> {
-		using Type = Order<pack...>;
+	struct ToParam<TypeTuple<pack...>> {
+		using Type = Param<pack...>;
 	};
 	template<>
-	struct ToOrder<TypeTuple<void>> {
-		using Type = Order<>;
+
+	struct ToParam<TypeTuple<void>> {
+		using Type = Param<>;
 	};
 
-	template<typename RawTuple, bool NonExpand = false>
-	struct ConjunctionSimplifiedTuple {
-		template<typename Tuple = RawTuple, int index = 1, typename Result = TypeTuple<void>>
-		struct RemoveNone {
-			using Current = Tuple::template Type<index>::Call;
-			static constexpr bool isNone = std::is_same_v<Current, None>;
-			using Type = RemoveNone<Tuple, index + 1, typename __If<isNone, Result, typename Merge<Result, Current>::Type>::Type>::Type;
+	template<char...symbols>
+	using L = Param<Symbol<symbols>...>;
+
+	template<typename Tuple, int index = 1, typename Result = TypeTuple<void>, int max = Tuple::size + 1>
+	struct RemoveNone {
+		using Current = Tuple::template Type<index>::Call;
+		static constexpr bool isNone = std::is_same_v<Current, None>;
+		using Type = RemoveNone<Tuple, index + 1, typename __If<isNone, Result, typename Merge<Result, Current>::Type>::Type>::Type;
+	};
+
+	template<typename Tuple, int index, typename Result>
+	struct RemoveNone<Tuple, index, Result, index> {
+		using Type = Result;
+	};
+
+	template<typename Tuple, bool Empty = std::is_same_v<Tuple, TypeTuple<void>>>
+	struct RemoveFirstCompose {
+		template<typename Front = typename Tuple::Front, typename Next = typename Tuple::Next, bool = Front::type == BasicType::Conjunction>
+		struct _RemoveFirstCompose {
+			using Type = Tuple;
 		};
-		template<typename Tuple, typename Result>
-		struct RemoveNone<Tuple, RawTuple::size + 1, Result> {
+		template<typename Front, typename Next>
+		struct _RemoveFirstCompose<Front, Next, true> {
+			using Type = Merge<typename __If<Front::unexpand, Front, typename Front::Params>::Type, Next>::Type;
+		};
+		using Type = _RemoveFirstCompose<>::Type;
+	};
+
+	template<typename Tuple>
+	struct RemoveFirstCompose<Tuple, true> {
+		using Type = Tuple;
+	};
+
+	template<typename Tuple, bool = (Tuple::size > 1)>
+	struct TryEvaluation {
+		template<typename Last, bool = Tuple::Front::type == BasicType::Expression>
+		struct TryOnce {
+			using Front = typename Last::Front;
+			using Arg = typename Last::Next::Front;
+			using Left = typename Last::Next::Next;
+			using Type = Merge<typename Front::template Apply<Arg>::Call, Left>::Type;
+		};
+		template<typename Result>
+		struct TryOnce<Result, false> {
+			using Left = TypeTuple<void>;
 			using Type = Result;
 		};
 
-		template<typename Tuple, bool Empty = std::is_same_v<Tuple, TypeTuple<void>>>
-		struct RemoveFirstCompose {
-			template<typename Front = typename Tuple::Front, typename Next = typename Tuple::Next, bool = Front::type == BasicType::Conjunction>
-			struct _RemoveFirstCompose {
-				using Type = Tuple;
-			};
-			template<typename Front, typename Next>
-			struct _RemoveFirstCompose<Front, Next, true> {
-				using Type = Merge<typename __If<Front::unexpand, Front, typename Front::Params>::Type, Next>::Type;
-			};
-			using Type = _RemoveFirstCompose<>::Type;
+		template<typename Last = Tuple, typename Result = typename TryOnce<Tuple>::Type, typename Left = typename TryOnce<Tuple>::Left>
+		struct Rec {
+			using Type = Rec<Result, typename TryOnce<Result>::Type, typename TryOnce<Result>::Left>::Type;
 		};
-		template<typename Tuple>
-		struct RemoveFirstCompose<Tuple, true> {
-			using Type = Tuple;
+		template<typename Last, typename Result>
+		struct Rec<Last, Result, TypeTuple<void>> {
+			using Type = Result;
 		};
 
-		template<typename Tuple, bool = (Tuple::size > 1) && !NonExpand>
-		struct TryEvaluation {
-			template<typename Last, bool = Tuple::Front::type == BasicType::Expression>
-			struct TryOnce {
-				using Front = typename Last::Front;
-				using Arg = typename Last::Next::Front;
-				using Left = typename Last::Next::Next;
-				using Type = Merge<typename Front::template Apply<Arg>::Call, Left>::Type;
-			};
-			template<typename Result>
-			struct TryOnce<Result, false> {
-				using Left = TypeTuple<void>;
-				using Type = Result;
-			};
+		using Type = Rec<>::Type;
+	};
 
-			template<typename Last = Tuple, typename Result = typename TryOnce<Tuple>::Type, typename Left = typename TryOnce<Tuple>::Left>
-			struct Rec {
-				using Type = Rec<Result, typename TryOnce<Result>::Type, typename TryOnce<Result>::Left>::Type;
-			};
-			template<typename Last, typename Result>
-			struct Rec<Last, Result, TypeTuple<void>> {
-				using Type = Result;
-			};
+	template<typename Tuple>
+	struct TryEvaluation<Tuple, false> {
+		using Type = Tuple;
+	};
 
-			using Type = Rec<>::Type;
-		};
-		template<typename Tuple>
-		struct TryEvaluation<Tuple, false> {
-			using Type = Tuple;
-		};
+	template<typename Tuple, bool NonExpand = false>
+	struct ConjunctionSimplifiedTuple {
+		using Type = TryEvaluation<typename RemoveFirstCompose<typename RemoveNone<Tuple>::Type>::Type>::Type;
+	};
 
-		using Type = TryEvaluation<typename RemoveFirstCompose<typename RemoveNone<>::Type>::Type>::Type;
+	template<typename Tuple>
+	struct ConjunctionSimplifiedTuple<Tuple, true> {
+		using Type = RemoveFirstCompose<typename RemoveNone<Tuple>::Type>::Type;
 	};
 
 	template<Label label, Valid Arg, typename Result, int index = 1, int max = Result::size + 1>
@@ -366,8 +366,9 @@ namespace Lambda {
 
 	template<typename paramlist, Valid expression>
 	struct LabelInspector;
+
 	template<Label...labels, Valid expression>
-	struct LabelInspector<Order<labels...>, expression> {
+	struct LabelInspector<Param<labels...>, expression> {
 		using Params = TypeTuple<labels...>;
 		using Used = LabelInfoBuilder<expression>::Type;
 		template<typename Left = Used, typename Uncovered = TypeTuple<void>>
@@ -384,11 +385,12 @@ namespace Lambda {
 
 	template<typename paramlist, Valid expression>
 	struct Expression;
+
 	template<Label...labels, Valid expression>
-	struct Expression<Order<labels...>, expression> : public LambdaCalculusBase {
+	struct Expression<Param<labels...>, expression> : public LambdaCalculusBase {
 		static constexpr BasicType type = BasicType::Expression;
-		using Labels = Order<labels...>::Labels;
-		using LabelInfo = LabelInspector<Order<labels...>, expression>;
+		using Labels = Param<labels...>::Labels;
+		using LabelInfo = LabelInspector<Param<labels...>, expression>;
 		using Uncovered = LabelInfo::Uncovered;
 		static constexpr bool curried = !std::is_same_v<typename LabelInfo::Uncovered, TypeTuple<void>>;
 		using InnerExpression = expression;
@@ -433,25 +435,25 @@ namespace Lambda {
 
 		template<typename Altered, typename Labels>
 		struct _Prototype {
-			using Type = Expression<typename ToOrder<Labels>::Type, Altered>;
+			using Type = Expression<typename ToParam<Labels>::Type, Altered>;
 		};
 		template<typename _>
 		struct _Prototype<void, _> {
 			using SimplifiedExpression = Simplify::Type;
 			using SimplifiedLabels = Simplify::Labels;
-			using Type = Expression<typename ToOrder<SimplifiedLabels>::Type, SimplifiedExpression>;
+			using Type = Expression<typename ToParam<SimplifiedLabels>::Type, SimplifiedExpression>;
 		};
 		template<Valid Altered>
 		struct _Prototype<Altered, void> {
-			using Type = Expression<typename ToOrder<Labels>::Type, Altered>;
+			using Type = Expression<typename ToParam<Labels>::Type, Altered>;
 		};
 		template<typename Altered = void, typename Labels = void>
 		using Prototype = _Prototype<Altered, Labels>::Type;
 
-		template<Label old, Label nov, typename OrderAfterReplace = typename Alter<Find<old, Labels>::loc, nov, Labels>::Type>
-		using SelfChange = Prototype<typename InnerExpression::template Change<old, nov>, OrderAfterReplace>;
+		template<Label old, Label nov, typename ParamAfterReplace = typename Alter<Find<old, Labels>::loc, nov, Labels>::Type>
+		using SelfChange = Prototype<typename InnerExpression::template Change<old, nov>, ParamAfterReplace>;
 
-		template<Valid Arg, bool = Order<labels...>::empty>
+		template<Valid Arg, bool = Param<labels...>::empty>
 		struct _Apply {
 			template<typename Left, typename Labels, typename Last = TypeTuple<void>>
 			struct IsConflict {
@@ -511,7 +513,7 @@ namespace Lambda {
 				using Type = Prototype<typename Changed::InnerExpression::template Replace<Current, Arg>, typename Changed::Labels::Next>;
 			};
 			template<Valid _>
-			struct LabelDealer<_, BasicType::Conjunction> {				
+			struct LabelDealer<_, BasicType::Conjunction> {
 				template<typename = Expression, bool = !std::is_same_v<typename IsConflict<Labels, typename Arg::Labels>::Type, TypeTuple<void>>>
 				struct Process {
 					using Conflict = IsConflict<Labels, typename Arg::Labels>::Type;
@@ -586,7 +588,7 @@ namespace Lambda {
 			auto inner = InnerExpression::print().substr();
 			if constexpr (InnerExpression::type == BasicType::Conjunction)
 				inner = inner.substr(1, inner.length() - 2);
-			return "(" + Order<labels...>::print() + "." + inner + ")";
+			return "(" + Param<labels...>::print() + "." + inner + ")";
 		}
 	};
 
@@ -606,42 +608,42 @@ namespace Lambda {
 	template<unsigned n, Valid F, Valid X>
 	using _N = __N<n, F, X>::Type;
 
-	using True = Expression<Order<L<'a'>, L<'b'>>, L<'a'>>;
-	using False = Expression<Order<L<'a'>, L<'b'>>, L<'b'>>;
-	using If = Expression<Order<L<'p'>, L<'a'>, L<'b'>>, Compose<L<'p'>, L<'a'>, L<'b'>>>;
-	using Identity = Expression<Order<L<'x'>>, L<'x'>>;
-	using S = Expression<Order<L<'f'>, L<'g'>, L<'x'>>, Compose<L<'f'>, L<'x'>, Compose<L<'g'>, L<'x'>>>>;
-	using K = Expression<Order<L<'x'>, L<'y'>>, L<'x'>>;
+	using True = Expression<L<'a', 'b'>, Symbol<'a'>>;
+	using False = Expression<L<'a', 'b'>, Symbol<'b'>>;
+	using If = Expression<L<'p', 'a', 'b'>, Compose<Symbol<'p'>, Symbol<'a'>, Symbol<'b'>>>;
+	using Identity = Expression<L<'x'>, Symbol<'x'>>;
+	using S = Expression<L<'f', 'g', 'x'>, Compose<Symbol<'f'>, Symbol<'x'>, Compose<Symbol<'g'>, Symbol<'x'>>>>;
+	using K = Expression<L<'x', 'y'>, Symbol<'x'>>;
 	using I = Identity;
-	using Iota = Expression<Order<L<'f'>>, Compose<L<'f'>, S, K>>;
-	using B = Expression<Order<L<'g'>, L<'h'>, L<'x'>>, Compose<L<'g'>, Compose<L<'h'>, L<'x'>>>>;
-	using C = Expression<Order<L<'x'>, L<'y'>, L<'z'>>, Compose<L<'x'>, L<'z'>, L<'y'>>>;
-	using W = Expression<Order<L<'x'>, L<'y'>>, Compose<L<'x'>, L<'y'>, L<'y'>>>;
-	using U = Expression<Order<L<'x'>, L<'y'>>, Compose<L<'x'>, L<'x'>, L<'y'>>>;
+	using Iota = Expression<L<'f'>, Compose<Symbol<'f'>, S, K>>;
+	using B = Expression<L<'g', 'h', 'x'>, Compose<Symbol<'g'>, Compose<Symbol<'h'>, Symbol<'x'>>>>;
+	using C = Expression<L<'x', 'y', 'z'>, Compose<Symbol<'x'>, Symbol<'z'>, Symbol<'y'>>>;
+	using W = Expression<L<'x', 'y'>, Compose<Symbol<'x'>, Symbol<'y'>, Symbol<'y'>>>;
+	using U = Expression<L<'x', 'y'>, Compose<Symbol<'x'>, Symbol<'x'>, Symbol<'y'>>>;
 	template<unsigned n>
-	using N = Expression<Order<L<'f'>, L<'x'>>, _N<n, L<'f'>, L<'x'>>>::Call;
-	using Succ = Expression<Order<L<'n'>, L<'f'>, L<'x'>>, Compose<L<'f'>, Compose<L<'n'>, L<'f'>, L<'x'>>>>;
-	using Plus = Expression<Order<L<'a'>, L<'b'>, L<'f'>, L<'x'>>, Compose<L<'a'>, L<'f'>, Compose<L<'b'>, L<'f'>, L<'x'>>>>;
-	using Mult = Expression<Order<L<'a'>, L<'b'>, L<'f'>>, Compose<L<'a'>, Compose<L<'b'>, L<'f'>>>>;
-	using Pred = Expression<Order<L<'n'>, L<'f'>, L<'x'>>, Compose<L<'n'>, Expression<Order<L<'g'>, L<'h'>>, Compose<L<'h'>, Compose<L<'g'>, L<'f'>>>>, Expression<Order<L<'u'>>, L<'x'>>, Identity>>;
-	using Sub = Expression<Order<L<'a'>, L<'b'>>, Compose<L<'b'>, Pred, L<'a'>>>;
-	using IsZero = Expression<Order<L<'n'>>, Compose<L<'n'>, Expression<Order<L<'x'>>, False>, True>>;
-	using Cons = Expression<Order<L<'a'>, L<'b'>, L<'p'>>, Compose<L<'p'>, L<'a'>, L<'b'>>>;
-	using Car = Expression<Order<L<'x'>>, Compose<L<'x'>, True>>;
-	using Cdr = Expression<Order<L<'x'>>, Compose<L<'x'>, False>>;
+	using N = Expression<L<'f', 'x'>, _N<n, Symbol<'f'>, Symbol<'x'>>>::Call;
+	using Succ = Expression<L<'n', 'f', 'x'>, Compose<Symbol<'f'>, Compose<Symbol<'n'>, Symbol<'f'>, Symbol<'x'>>>>;
+	using Plus = Expression<L<'a', 'b', 'f', 'x'>, Compose<Symbol<'a'>, Symbol<'f'>, Compose<Symbol<'b'>, Symbol<'f'>, Symbol<'x'>>>>;
+	using Mult = Expression<L<'a', 'b', 'f'>, Compose<Symbol<'a'>, Compose<Symbol<'b'>, Symbol<'f'>>>>;
+	using Pred = Expression<L<'n', 'f', 'x'>, Compose<Symbol<'n'>, Expression<L<'g', 'h'>, Compose<Symbol<'h'>, Compose<Symbol<'g'>, Symbol<'f'>>>>, Expression<L<'u'>, Symbol<'x'>>, Identity>>;
+	using Sub = Expression<L<'a', 'b'>, Compose<Symbol<'b'>, Pred, Symbol<'a'>>>;
+	using IsZero = Expression<L<'n'>, Compose<Symbol<'n'>, Expression<L<'x'>, False>, True>>;
+	using Cons = Expression<L<'a', 'b', 'p'>, Compose<Symbol<'p'>, Symbol<'a'>, Symbol<'b'>>>;
+	using Car = Expression<L<'x'>, Compose<Symbol<'x'>, True>>;
+	using Cdr = Expression<L<'x'>, Compose<Symbol<'x'>, False>>;
 	/**Alternative Pred
 	* using Pred_ZeroCons = Compose<Cons, N<0>, N<0>>;
-	* using Pred_SuccCons = Expression<Order<L<'x'>>, Compose<Cons, Compose<Succ, Compose<Car, L<'x'>>>, Compose<Car, L<'x'>>>>;
-	* using Pred = Expression<Order<L<'n'>>, Compose<Cdr, Compose<L<'n'>, Pred_SuccCons, Pred_ZeroCons>>>;
+	* using Pred_SuccCons = Expression<L<'x'>, Compose<Cons, Compose<Succ, Compose<Car, Symbol<'x'>>>, Compose<Car, Symbol<'x'>>>>;
+	* using Pred = Expression<L<'n'>, Compose<Cdr, Compose<Symbol<'n'>, Pred_SuccCons, Pred_ZeroCons>>>;
 	*/
 	using Fib_ZeroCons = Compose<Cons, N<0>, N<1>>;
-	using Fib_SuccCons = Expression<Order<L<'x'>>, Compose<Cons, Compose<Cdr, L<'x'>>, Compose<Plus, Compose<Car, L<'x'>>, Compose<Cdr, L<'x'>>>>>;
-	using Fib = Expression<Order<L<'n'>>, Compose<Cdr, Compose<L<'n'>, Fib_SuccCons, Fib_ZeroCons>>>;
+	using Fib_SuccCons = Expression<L<'x'>, Compose<Cons, Compose<Cdr, Symbol<'x'>>, Compose<Plus, Compose<Car, Symbol<'x'>>, Compose<Cdr, Symbol<'x'>>>>>;
+	using Fib = Expression<L<'n'>, Compose<Cdr, Compose<Symbol<'n'>, Fib_SuccCons, Fib_ZeroCons>>>;
 
 	template<Valid...Args>
 	struct NonExpandCompose : public LambdaCalculusBase {
 		static constexpr BasicType type = BasicType::Conjunction;
-		static constexpr bool unexpand = true; 
+		static constexpr bool unexpand = true;
 		using Labels = LabelInfoBuilder<Args...>::Type;
 		using Params = TypeTuple<Args...>;
 		using Simplified = ConjunctionSimplifiedTuple<Params, unexpand>::Type;
@@ -678,7 +680,7 @@ namespace Lambda {
 	template<Valid Fun>
 	struct _Y :public LambdaCalculusBase {
 		//f(x x) f(x x)
-		using InnerFunction = NonExpandCompose<Expression<Order<L<'x'>>, Compose<Fun, Compose<L<'x'>, L<'x'>>>>, Expression<Order<L<'x'>>, Compose<Fun, Compose<L<'x'>, L<'x'>>>>>;
+		using InnerFunction = NonExpandCompose<Expression<Param<Symbol<'x'>>, Compose<Fun, Compose<Symbol<'x'>, Symbol<'x'>>>>, Expression<Param<Symbol<'x'>>, Compose<Fun, Compose<Symbol<'x'>, Symbol<'x'>>>>>;
 		//n f (f(x x) f(x x))
 		template<unsigned n>
 		using ExpressionN = _N<n, Fun, InnerFunction>;
@@ -724,11 +726,11 @@ namespace Lambda {
 
 	struct Y : public LambdaCalculusBase {
 		//f(x x) f(x x)
-		using InnerFunction = Expression<Order<L<'f'>>, NonExpandCompose<Expression<Order<L<'x'>>, Compose<L<'f'>, Compose<L<'x'>, L<'x'>>>>, Expression<Order<L<'x'>>, Compose<L<'f'>, Compose<L<'x'>, L<'x'>>>>>>;
+		using InnerFunction = Expression<Param<Symbol<'f'>>, NonExpandCompose<Expression<Param<Symbol<'x'>>, Compose<Symbol<'f'>, Compose<Symbol<'x'>, Symbol<'x'>>>>, Expression<Param<Symbol<'x'>>, Compose<Symbol<'f'>, Compose<Symbol<'x'>, Symbol<'x'>>>>>>;
 
 		static constexpr BasicType type = BasicType::Y;
 		using Labels = TypeTuple<void>;
-		
+
 		using Call = Y;
 		template<Valid Fun>
 		using Apply = __If<std::is_same_v<Fun, None>, Y, _Y<typename Fun::Call>>::Type;
